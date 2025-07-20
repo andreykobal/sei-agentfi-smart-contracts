@@ -30,7 +30,7 @@ contract SwapScript is BaseScript {
             poolKey: poolKey,
             hookData: hookData,
             receiver: deployerAddress, // ← FIXED: Use your wallet instead of script address
-            deadline: block.timestamp + 1
+            deadline: block.timestamp + 300  // 5 minutes instead of 1 second
         });
 
         vm.stopBroadcast();

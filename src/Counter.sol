@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
+import {BaseHook} from "@uniswap/v4-periphery/src/utils/BaseHook.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager, SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
@@ -55,7 +56,7 @@ contract Counter is BaseHook {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         beforeSwapCount[key.toId()]++;
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
     function _afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
@@ -64,7 +65,7 @@ contract Counter is BaseHook {
         returns (bytes4, int128)
     {
         afterSwapCount[key.toId()]++;
-        return (BaseHook.afterSwap.selector, 0);
+        return (this.afterSwap.selector, 0);
     }
 
     function _beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
@@ -73,7 +74,7 @@ contract Counter is BaseHook {
         returns (bytes4)
     {
         beforeAddLiquidityCount[key.toId()]++;
-        return BaseHook.beforeAddLiquidity.selector;
+        return this.beforeAddLiquidity.selector;
     }
 
     function _beforeRemoveLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
@@ -82,6 +83,6 @@ contract Counter is BaseHook {
         returns (bytes4)
     {
         beforeRemoveLiquidityCount[key.toId()]++;
-        return BaseHook.beforeRemoveLiquidity.selector;
+        return this.beforeRemoveLiquidity.selector;
     }
 }
