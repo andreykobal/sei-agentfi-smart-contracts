@@ -484,9 +484,4 @@ contract BondingCurve is BaseHook {
         // Allow swap to proceed normally for graduated tokens
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
-
-
-
-
-
 }
