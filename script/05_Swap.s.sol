@@ -12,10 +12,10 @@ import {MockERC20} from "../src/MockERC20.sol";
 
 contract SwapScript is BaseScript {
     // Hardcoded second token address - update this as needed
-    address constant OTHER_TOKEN = 0x9b3D7F849E1C6cFb07Eba7C14aC3556243Fc0C77; // Update this address as needed
+    address constant OTHER_TOKEN = 0xA80E1507d403B520bA52F7939af2a9D7fCC00356; // Update this address as needed
     
     function run() external {
-        uint256 usdtAmount = 1000e18; // 1000 USDT (18 decimals)
+        uint256 usdtAmount = 5000e18; // 5000 USDT (18 decimals)
         
         console.log("=== Bonding Curve Token Purchase ===");
         console.log("USDT Address:", address(usdt));
@@ -70,11 +70,24 @@ contract SwapScript is BaseScript {
         console.log("Token Balance:", tokenBalanceAfter);
         console.log("");
         
+        // Log formatted balances for readability
+        console.log("=== Formatted Balances ===");
+        console.log("USDT Balance:", usdtBalanceAfter / 1e18, "USDT");
+        console.log("Token Balance:", tokenBalanceAfter / 1e18, "tokens");
+        console.log("");
+        
         console.log("=== Transaction Summary ===");
         console.log("USDT Spent:", usdtSpent);
         console.log("Tokens Gained:", tokensGained);
         console.log("Tokens Received (from function):", tokensReceived);
         console.log("Expected vs Actual Match:", tokensGained == tokensReceived ? "YES" : "NO");
+        console.log("");
+        
+        // Log formatted transaction summary
+        console.log("=== Formatted Transaction Summary ===");
+        console.log("USDT Spent:", usdtSpent / 1e18, "USDT");
+        console.log("Tokens Gained:", tokensGained / 1e18, "tokens");
+        console.log("Rate:", (tokensGained / 1e18) / (usdtSpent / 1e18), "tokens per USDT");
         console.log("");
         
         console.log("=== Bonding Curve Stats ===");
@@ -85,7 +98,9 @@ contract SwapScript is BaseScript {
         // Show next purchase price
         uint256 nextTokens = bondingCurve.calculateTokensToMint(OTHER_TOKEN, usdtAmount);
         console.log("=== Next Purchase Preview ===");
-        console.log("Next 100 USDT would get:", nextTokens, "tokens");
+        console.log("Next purchase amount:", usdtAmount / 1e18, "USDT");
+        console.log("Would get (raw):", nextTokens, "tokens");
+        console.log("Would get (formatted):", nextTokens / 1e18, "tokens");
         
         if (nextTokens < tokensGained) {
             uint256 priceIncrease = ((tokensGained - nextTokens) * 100) / tokensGained;
