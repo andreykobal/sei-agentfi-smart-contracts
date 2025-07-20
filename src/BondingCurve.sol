@@ -57,10 +57,25 @@ contract BondingCurve is BaseHook {
     uint256 public constant USDT_GRADUATION_THRESHOLD = 20_000 * 1e18; // 20K USDT
     uint256 public constant TOTAL_TOKEN_SUPPLY = 1_000_000_000 * 1e18; // 1B total token supply
     
+    // Bonding curve constants (PUMP.FUN formula scaled for USDT)
+    uint256 private constant VIRTUAL_USDT_RESERVE = 6000; // 6000 USDT (natural units)
+    uint256 private constant VIRTUAL_TOKEN_RESERVE = 1073000191; // ~1.073B tokens (natural units)
+    uint256 private constant BONDING_CURVE_K = VIRTUAL_USDT_RESERVE * VIRTUAL_TOKEN_RESERVE; // k = 6,438,000,006,000
+    
     // Events
     event TokenCreated(address indexed token, address indexed creator, string name, string symbol);
     event LiquidityAdded(address indexed token, uint256 usdtAmount, uint256 tokenAmount);
     event TokenGraduated(address indexed token, uint256 totalMinted, uint256 totalUsdtRaised);
+    
+    /// @notice Get current virtual reserves state for a token's bonding curve
+    /// @param tokenAddress The token address
+    /// @return virtualUsdtNatural Current virtual USDT reserve in natural units
+    /// @return virtualTokensNatural Current virtual token reserve in natural units
+    function _getCurrentVirtualReserves(address tokenAddress) private view returns (uint256 virtualUsdtNatural, uint256 virtualTokensNatural) {
+        uint256 currentUsdtRaisedNatural = totalUsdtRaised[tokenAddress] / 1e18;
+        virtualUsdtNatural = VIRTUAL_USDT_RESERVE + currentUsdtRaisedNatural;
+        virtualTokensNatural = BONDING_CURVE_K / virtualUsdtNatural;
+    }
 
     constructor(IPoolManager _poolManager, address _tokenFactory, address _usdt, IPositionManager _positionManager, IPermit2 _permit2) BaseHook(_poolManager) {
         tokenFactory = TokenFactory(_tokenFactory);
@@ -113,28 +128,15 @@ contract BondingCurve is BaseHook {
     /// @param usdtAmount The amount of USDT being spent (in wei)
     /// @return tokensToMint The number of tokens to mint (in wei)
     function calculateTokensToMint(address tokenAddress, uint256 usdtAmount) public view returns (uint256 tokensToMint) {
-        uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
+        // Get current virtual reserves state
+        (uint256 currentVirtualUsdtNatural, uint256 currentVirtualTokensNatural) = _getCurrentVirtualReserves(tokenAddress);
         
-        // PUMP.FUN bonding curve formula scaled for SOL=$200, USDT=$1
-        // Original: y = 1073000191 - 32190005730/(30+x) where x=SOL, y=tokens (natural units)
-        // Scaled: y = 1073000191 - 6438000006000/(6000+x) where x=USDT, y=tokens (natural units)
-        //
         // Convert wei to natural units for calculation
-        uint256 virtualUsdtReserve = 6000; // 6000 USDT (natural units)
-        uint256 virtualTokenReserve = 1073000191; // ~1.073B tokens (natural units)
-        uint256 k = virtualUsdtReserve * virtualTokenReserve; // k = 6,438,000,006,000
-        
-        // Convert wei amounts to natural units for calculation
-        uint256 currentUsdtRaisedNatural = currentUsdtRaised / 1e18;
         uint256 usdtAmountNatural = usdtAmount / 1e18;
-        
-        // Current virtual state after previous purchases (natural units)
-        uint256 currentVirtualUsdtNatural = virtualUsdtReserve + currentUsdtRaisedNatural;
-        uint256 currentVirtualTokensNatural = k / currentVirtualUsdtNatural;
         
         // Virtual state after this purchase (natural units)
         uint256 newVirtualUsdtNatural = currentVirtualUsdtNatural + usdtAmountNatural;
-        uint256 newVirtualTokensNatural = k / newVirtualUsdtNatural;
+        uint256 newVirtualTokensNatural = BONDING_CURVE_K / newVirtualUsdtNatural;
         
         // Tokens to mint in natural units
         uint256 tokensToMintNatural = currentVirtualTokensNatural - newVirtualTokensNatural;
@@ -149,19 +151,8 @@ contract BondingCurve is BaseHook {
     /// @param tokenAddress The token address
     /// @return priceUsdtPerToken The current price in USDT per token (in wei units)
     function getCurrentBondingCurvePrice(address tokenAddress) public view returns (uint256 priceUsdtPerToken) {
-        uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
-        
-        // Same bonding curve constants as calculateTokensToMint
-        uint256 virtualUsdtReserve = 6000; // 6000 USDT (natural units)
-        uint256 virtualTokenReserve = 1073000191; // ~1.073B tokens (natural units)
-        uint256 k = virtualUsdtReserve * virtualTokenReserve; // k = 6,438,000,006,000
-        
-        // Convert wei to natural units for calculation
-        uint256 currentUsdtRaisedNatural = currentUsdtRaised / 1e18;
-        
-        // Current virtual state after all purchases (natural units)
-        uint256 currentVirtualUsdtNatural = virtualUsdtReserve + currentUsdtRaisedNatural;
-        uint256 currentVirtualTokensNatural = k / currentVirtualUsdtNatural;
+        // Get current virtual reserves state
+        (uint256 currentVirtualUsdtNatural, uint256 currentVirtualTokensNatural) = _getCurrentVirtualReserves(tokenAddress);
         
         // Price = USDT / Token (in natural units)
         // priceNatural = currentVirtualUsdtNatural / currentVirtualTokensNatural
@@ -268,6 +259,69 @@ contract BondingCurve is BaseHook {
         }
         
         return tokensReceived;
+    }
+    
+    /// @notice Calculate how much USDT to return for selling tokens using the inverse bonding curve
+    /// @param tokenAddress The token address
+    /// @param tokenAmount The amount of tokens being sold (in wei)
+    /// @return usdtToReturn The amount of USDT to return (in wei)
+    function calculateUsdtToReturn(address tokenAddress, uint256 tokenAmount) public view returns (uint256 usdtToReturn) {
+        uint256 currentTokensMinted = totalMinted[tokenAddress];
+        
+        // Can't sell more than minted via bonding curve
+        require(tokenAmount <= currentTokensMinted, "Cannot sell more than total minted");
+        
+        // Get current virtual reserves state
+        (uint256 currentVirtualUsdtNatural, uint256 currentVirtualTokensNatural) = _getCurrentVirtualReserves(tokenAddress);
+        
+        // Convert wei to natural units for calculation
+        uint256 tokenAmountNatural = tokenAmount / 1e18;
+        
+        // Virtual state after selling tokens (natural units)
+        // When selling, virtual tokens increase and virtual USDT decreases
+        uint256 newVirtualTokensNatural = currentVirtualTokensNatural + tokenAmountNatural;
+        uint256 newVirtualUsdtNatural = BONDING_CURVE_K / newVirtualTokensNatural;
+        
+        // USDT to return in natural units
+        uint256 usdtToReturnNatural = currentVirtualUsdtNatural - newVirtualUsdtNatural;
+        
+        // Convert back to wei for return
+        usdtToReturn = usdtToReturnNatural * 1e18;
+        
+        return usdtToReturn;
+    }
+    
+    /// @notice Sell tokens back to the bonding curve for USDT
+    /// @param tokenAddress The address of the token to sell
+    /// @param tokenAmount The amount of tokens to sell
+    /// @return usdtReceived The amount of USDT received
+    function sellTokens(address tokenAddress, uint256 tokenAmount) external returns (uint256 usdtReceived) {
+        require(tokenAmount > 0, "Amount must be greater than 0");
+        require(!isTokenGraduated(tokenAddress), "Token has graduated - use normal swaps instead");
+        require(MockERC20(tokenAddress).balanceOf(msg.sender) >= tokenAmount, "Insufficient token balance");
+        
+        // Can't sell more than what was minted via bonding curve
+        require(tokenAmount <= totalMinted[tokenAddress], "Cannot sell more than total minted");
+        
+        // Calculate USDT to return using inverse bonding curve
+        usdtReceived = calculateUsdtToReturn(tokenAddress, tokenAmount);
+        require(usdtReceived > 0, "No USDT to return");
+        
+        // Make sure we have enough USDT in the contract
+        require(MockERC20(usdt).balanceOf(address(this)) >= usdtReceived, "Insufficient USDT in contract");
+        
+        // Transfer tokens from user to this contract then burn them
+        MockERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
+        MockERC20(tokenAddress).burn(address(this), tokenAmount);
+        
+        // Transfer USDT to user
+        MockERC20(usdt).transfer(msg.sender, usdtReceived);
+        
+        // Update tracking
+        totalMinted[tokenAddress] -= tokenAmount;
+        totalUsdtRaised[tokenAddress] -= usdtReceived;
+        
+        return usdtReceived;
     }
     
     /// @notice Internal function to create pool and add liquidity using PositionManager
