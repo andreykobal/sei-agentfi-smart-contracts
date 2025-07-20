@@ -13,7 +13,7 @@ import {MockERC20} from "../src/MockERC20.sol";
 contract SwapScript is BaseScript {
     
     function run() external {
-        uint256 usdtAmount = 5000e18; // 5000 USDT (18 decimals)
+        uint256 usdtAmount = 6000e18; // 5000 USDT (18 decimals)
         
         // Check if memecoin token has been created
         require(address(memecoinToken) != address(0), "Memecoin token not created yet. Run 03_CreateToken.s.sol first.");
@@ -82,7 +82,7 @@ contract SwapScript is BaseScript {
         uint256 totalRaised = bondingCurve.totalUsdtRaised(address(memecoinToken));
         
         // Check graduation status
-        (bool isGraduated, uint256 tokensMinted, uint256 tokensUntilGraduation, uint256 progressPercent) = 
+        (bool isGraduated, uint256 usdtRaised, uint256 usdtUntilGraduation, uint256 progressPercent) = 
             bondingCurve.getGraduationStatus(address(memecoinToken));
         
         // Log results
@@ -138,7 +138,7 @@ contract SwapScript is BaseScript {
         } else {
             console.log("Status: Bonding Curve Phase");
             console.log("Progress:", progressPercent, "% to graduation");
-            console.log("Tokens until graduation:", tokensUntilGraduation / 1e18, "tokens");
+            console.log("USDT until graduation:", usdtUntilGraduation / 1e18, "USDT");
         }
         console.log("");
         

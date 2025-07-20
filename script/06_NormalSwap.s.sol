@@ -36,10 +36,10 @@ contract NormalSwapScript is BaseScript {
             console.log("Use 05_Swap.s.sol (buyTokens) instead.");
             
             // Show graduation status
-            (, uint256 tokensMinted, uint256 tokensUntilGraduation, uint256 progressPercent) = 
+            (, uint256 usdtRaised, uint256 usdtUntilGraduation, uint256 progressPercent) = 
                 bondingCurve.getGraduationStatus(address(memecoinToken));
             console.log("Current Progress:", progressPercent, "% to graduation");
-            console.log("Tokens until graduation:", tokensUntilGraduation / 1e18, "tokens");
+            console.log("USDT until graduation:", usdtUntilGraduation / 1e18, "USDT");
             return;
         }
         

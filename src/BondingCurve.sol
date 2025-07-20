@@ -54,8 +54,8 @@ contract BondingCurve is BaseHook {
     mapping(address => bool) public liquidityAdded; // Track if liquidity has been added for a token
     
     // Constants
-    uint256 public constant LIQUIDITY_THRESHOLD = 800_000_000 * 1e18; // 800M tokens
-    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens (legacy - now calculated dynamically)
+    uint256 public constant USDT_GRADUATION_THRESHOLD = 20_000 * 1e18; // 20K USDT
+    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens for pool
     
     // Events
     event TokenCreated(address indexed token, address indexed creator, string name, string symbol);
@@ -155,24 +155,24 @@ contract BondingCurve is BaseHook {
     /// @notice Get graduation progress for a token
     /// @param tokenAddress The token address to check
     /// @return isGraduated True if token has graduated
-    /// @return tokensMinted Current tokens minted via bonding curve
-    /// @return tokensUntilGraduation Tokens remaining until graduation (0 if graduated)
+    /// @return usdtRaised Current USDT raised via bonding curve
+    /// @return usdtUntilGraduation USDT remaining until graduation (0 if graduated)
     /// @return progressPercent Progress toward graduation (0-100, or 100+ if graduated)
     function getGraduationStatus(address tokenAddress) public view returns (
         bool isGraduated,
-        uint256 tokensMinted,
-        uint256 tokensUntilGraduation,
+        uint256 usdtRaised,
+        uint256 usdtUntilGraduation,
         uint256 progressPercent
     ) {
         isGraduated = liquidityAdded[tokenAddress];
-        tokensMinted = totalMinted[tokenAddress];
+        usdtRaised = totalUsdtRaised[tokenAddress];
         
-        if (isGraduated || tokensMinted >= LIQUIDITY_THRESHOLD) {
-            tokensUntilGraduation = 0;
+        if (isGraduated || usdtRaised >= USDT_GRADUATION_THRESHOLD) {
+            usdtUntilGraduation = 0;
             progressPercent = 100;
         } else {
-            tokensUntilGraduation = LIQUIDITY_THRESHOLD - tokensMinted;
-            progressPercent = (tokensMinted * 100) / LIQUIDITY_THRESHOLD;
+            usdtUntilGraduation = USDT_GRADUATION_THRESHOLD - usdtRaised;
+            progressPercent = (usdtRaised * 100) / USDT_GRADUATION_THRESHOLD;
         }
     }
     
@@ -184,22 +184,39 @@ contract BondingCurve is BaseHook {
         require(usdtAmount > 0, "Amount must be greater than 0");
         require(!isTokenGraduated(tokenAddress), "Token has graduated - use normal swaps instead");
         
-        // Calculate tokens to mint
-        tokensReceived = calculateTokensToMint(tokenAddress, usdtAmount);
+        uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
+        uint256 actualUsdtToSpend = usdtAmount;
+        uint256 refundAmount = 0;
+        
+        // Check if this purchase would exceed the graduation threshold
+        if (currentUsdtRaised + usdtAmount > USDT_GRADUATION_THRESHOLD) {
+            // Calculate how much USDT we can actually accept
+            actualUsdtToSpend = USDT_GRADUATION_THRESHOLD - currentUsdtRaised;
+            refundAmount = usdtAmount - actualUsdtToSpend;
+            require(actualUsdtToSpend > 0, "Already at graduation threshold");
+        }
+        
+        // Calculate tokens to mint based on actual USDT to spend
+        tokensReceived = calculateTokensToMint(tokenAddress, actualUsdtToSpend);
         require(tokensReceived > 0, "No tokens to mint");
         
-        // Transfer USDT from user to this contract
+        // Transfer USDT from user to this contract (full amount first)
         MockERC20(usdt).transferFrom(msg.sender, address(this), usdtAmount);
+        
+        // Refund excess USDT if needed
+        if (refundAmount > 0) {
+            MockERC20(usdt).transfer(msg.sender, refundAmount);
+        }
         
         // Mint tokens to user
         MockERC20(tokenAddress).mint(msg.sender, tokensReceived);
         
-        // Update tracking
+        // Update tracking with actual amounts
         totalMinted[tokenAddress] += tokensReceived;
-        totalUsdtRaised[tokenAddress] += usdtAmount;
+        totalUsdtRaised[tokenAddress] += actualUsdtToSpend;
         
-        // Check if we should add liquidity (800M+ tokens minted and not already added)
-        if (totalMinted[tokenAddress] >= LIQUIDITY_THRESHOLD && !liquidityAdded[tokenAddress]) {
+        // Check if we should add liquidity (20K USDT raised and not already added)
+        if (totalUsdtRaised[tokenAddress] >= USDT_GRADUATION_THRESHOLD && !liquidityAdded[tokenAddress]) {
             _addLiquidityToPool(tokenAddress);
             liquidityAdded[tokenAddress] = true;
             
@@ -330,7 +347,7 @@ contract BondingCurve is BaseHook {
     /// @notice Manually trigger liquidity addition if threshold is met
     /// @param tokenAddress The token address to add liquidity for
     function addLiquidityIfReady(address tokenAddress) external {
-        require(totalMinted[tokenAddress] >= LIQUIDITY_THRESHOLD, "Threshold not met");
+        require(totalUsdtRaised[tokenAddress] >= USDT_GRADUATION_THRESHOLD, "USDT threshold not met");
         require(!liquidityAdded[tokenAddress], "Liquidity already added");
         
         _addLiquidityToPool(tokenAddress);
