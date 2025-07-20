@@ -8,12 +8,12 @@ import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import {BaseScript} from "./base/BaseScript.sol";
 
-import {Counter} from "../src/Counter.sol";
+import {BondingCurve} from "../src/BondingCurve.sol";
 
-/// @notice Mines the address and deploys the Counter.sol Hook contract
+/// @notice Mines the address and deploys the BondingCurve.sol Hook contract
 contract DeployHookScript is BaseScript {
     function run() public {
-        console2.log("=== Deploying Counter Hook ===");
+        console2.log("=== Deploying BondingCurve Hook ===");
         console2.log("Deployer:", deployerAddress);
         console2.log("Chain ID:", block.chainid);
         console2.log("");
@@ -35,7 +35,7 @@ contract DeployHookScript is BaseScript {
         bytes memory constructorArgs = abi.encode(poolManager);
         console2.log("Mining hook address with correct flags...");
         (address hookAddress, bytes32 salt) =
-            HookMiner.find(StdConstants.CREATE2_FACTORY, flags, type(Counter).creationCode, constructorArgs);
+            HookMiner.find(StdConstants.CREATE2_FACTORY, flags, type(BondingCurve).creationCode, constructorArgs);
 
         console2.log("Found valid hook address:", hookAddress);
         console2.log("Salt used:", vm.toString(salt));
@@ -43,18 +43,18 @@ contract DeployHookScript is BaseScript {
 
         // Deploy the hook using CREATE2
         vm.startBroadcast();
-        Counter counter = new Counter{salt: salt}(poolManager);
+        BondingCurve bondingCurve = new BondingCurve{salt: salt}(poolManager);
         vm.stopBroadcast();
 
-        require(address(counter) == hookAddress, "DeployHookScript: Hook Address Mismatch");
+        require(address(bondingCurve) == hookAddress, "DeployHookScript: Hook Address Mismatch");
 
         console2.log("=== Hook Deployed Successfully ===");
-        console2.log("Hook Address:", address(counter));
+        console2.log("Hook Address:", address(bondingCurve));
         console2.log("PoolManager:", address(poolManager));
         console2.log("");
 
         // Save hook address to deployment JSON
-        saveHookToJson(address(counter));
+        saveHookToJson(address(bondingCurve));
 
         console2.log("=== Next Steps ===");
         console2.log("1. Run 01_CreatePoolAndAddLiquidity.s.sol to create a pool with your hook");

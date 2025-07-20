@@ -11,7 +11,7 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 
-contract Counter is BaseHook {
+contract BondingCurve is BaseHook {
     using PoolIdLibrary for PoolKey;
 
     // NOTE: ---------------------------------------------------------

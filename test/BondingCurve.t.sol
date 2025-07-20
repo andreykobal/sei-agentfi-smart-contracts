@@ -20,9 +20,9 @@ import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
 import {Deployers} from "./utils/Deployers.sol";
 
-import {Counter} from "../src/Counter.sol";
+import {BondingCurve} from "../src/BondingCurve.sol";
 
-contract CounterTest is Test, Deployers {
+contract BondingCurveTest is Test, Deployers {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -33,7 +33,7 @@ contract CounterTest is Test, Deployers {
 
     PoolKey poolKey;
 
-    Counter hook;
+    BondingCurve hook;
     PoolId poolId;
 
     uint256 tokenId;
@@ -54,8 +54,8 @@ contract CounterTest is Test, Deployers {
             ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         bytes memory constructorArgs = abi.encode(poolManager); // Add all the necessary constructor arguments from the hook
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("BondingCurve.sol:BondingCurve", constructorArgs, flags);
+        hook = BondingCurve(flags);
 
         // Create the pool
         poolKey = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
@@ -88,7 +88,7 @@ contract CounterTest is Test, Deployers {
         );
     }
 
-    function testCounterHooks() public {
+    function testBondingCurveHooks() public {
         // positions were created in setup()
         assertEq(hook.beforeAddLiquidityCount(poolId), 1);
         assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
