@@ -132,7 +132,14 @@ contract NormalSwapScript is BaseScript {
         console.log("Tokens Received:", tokensGained / 1e18, "tokens");
         
         if (usdtSpent > 0) {
-            console.log("Exchange Rate:", (tokensGained / 1e18) / (usdtSpent / 1e18), "tokens per USDT");
+            // Calculate exchange rate without losing precision for small amounts
+            uint256 exchangeRate = (tokensGained * 1e18) / usdtSpent; // tokens per USDT in wei precision
+            console.log("Exchange Rate:", exchangeRate / 1e18, "tokens per USDT");
+            
+            // Show detailed amounts for debugging
+            console.log("Detailed amounts:");
+            console.log("- USDT Spent (wei):", usdtSpent);
+            console.log("- Tokens Received (wei):", tokensGained);
         }
         console.log("");
         

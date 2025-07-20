@@ -238,31 +238,29 @@ contract BondingCurve is BaseHook {
         uint256 usdtAmount = totalUsdtRaised[tokenAddress];
         require(usdtAmount > 0, "No USDT to add as liquidity");
         
-        // Calculate final bonding curve price to ensure smooth transition
-        uint256 tokensPerUSDT = calculateTokensToMint(tokenAddress, 1e18);
-        
-        // Calculate tokens needed to maintain bonding curve price in AMM
-        // Note: tokensPerUSDT is in wei, usdtAmount is in wei, so divide by 1e18 to avoid double-counting decimals
-        uint256 tokensForLiquidity = (tokensPerUSDT * usdtAmount) / 1e18;
+        // Fixed amount of tokens for liquidity (200M tokens)
+        uint256 tokensForLiquidity = 200_000_000 * 1e18; // 200M tokens
         
         // Mint tokens for liquidity to this contract
         MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
         
-        // Calculate the correct sqrt price for the final bonding curve price
+        // Calculate target price ratio: 200M tokens for 20K USDT = 10,000 tokens per USDT
+        // Following the demo script pattern: sqrt(price) * 2^96
         uint160 sqrtPriceX96;
         
         if (Currency.unwrap(key.currency0) == tokenAddress) {
             // token is currency0, USDT is currency1
-            // price = currency1/currency0 = USDT/token = 1/tokensPerUSDT
-            uint256 price = (1e36) / tokensPerUSDT; // price in wei terms
-            sqrtPriceX96 = uint160(_sqrt(price) * (2**96) / 1e18);
+            // price = USDT/token = 20K/200M = 0.0001
+            // sqrtPriceX96 = sqrt(0.0001) * 2^96 = 0.01 * 2^96
+            sqrtPriceX96 = 792281625142643375935439503; // 0.01 * 2^96
         } else {
             // USDT is currency0, token is currency1  
-            // price = currency1/currency0 = token/USDT = tokensPerUSDT
-            sqrtPriceX96 = uint160(_sqrt(tokensPerUSDT * 1e18) * (2**96) / 1e18);
+            // price = token/USDT = 200M/20K = 10,000
+            // sqrtPriceX96 = sqrt(10000) * 2^96 = 100 * 2^96  
+            sqrtPriceX96 = 7922816251426433759354395033600; // 100 * 2^96
         }
         
-        // Create the pool with the correct sqrt price!
+        // Create the pool with the starting sqrt price
         poolManager.initialize(key, sqrtPriceX96);
         
         // Store the pool mappings now that pool is created
@@ -379,18 +377,5 @@ contract BondingCurve is BaseHook {
     {
         return this.beforeRemoveLiquidity.selector;
     }
-    
-    /// @notice Calculate square root using Babylonian method
-    /// @param x The number to calculate square root for
-    /// @return The square root of x
-    function _sqrt(uint256 x) internal pure returns (uint256) {
-        if (x == 0) return 0;
-        uint256 z = (x + 1) / 2;
-        uint256 y = x;
-        while (z < y) {
-            y = z;
-            z = (x / z + z) / 2;
-        }
-        return y;
-    }
+
 }
