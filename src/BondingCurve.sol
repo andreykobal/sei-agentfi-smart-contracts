@@ -127,26 +127,39 @@ contract BondingCurve is BaseHook {
         return (tokenAddress, poolId);
     }
 
-    /// @notice Calculate how many tokens to mint for a given USDT amount based on bonding curve
-    /// @param tokenAddress The token address
-    /// @param usdtAmount The amount of USDT being spent
-    /// @return tokensToMint The number of tokens to mint
+    /// @notice Calculate how many tokens to mint for a given USDT amount using PUMP.FUN's bonding curve
+    /// @param tokenAddress The token address  
+    /// @param usdtAmount The amount of USDT being spent (in wei)
+    /// @return tokensToMint The number of tokens to mint (in wei)
     function calculateTokensToMint(address tokenAddress, uint256 usdtAmount) public view returns (uint256 tokensToMint) {
-        uint256 currentSupply = totalMinted[tokenAddress];
+        uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
         
-        // Simple linear bonding curve: price increases as supply increases
-        // Base price: 80,000 tokens per USDT
-        // Price formula: baseTokens * (1 + supply / 1e24)
-        // This means as more tokens are minted, fewer tokens per USDT
+        // PUMP.FUN bonding curve formula scaled for SOL=$200, USDT=$1
+        // Original: y = 1073000191 - 32190005730/(30+x) where x=SOL, y=tokens (natural units)
+        // Scaled: y = 1073000191 - 6438000006000/(6000+x) where x=USDT, y=tokens (natural units)
+        //
+        // Convert wei to natural units for calculation
+        uint256 virtualUsdtReserve = 6000; // 6000 USDT (natural units)
+        uint256 virtualTokenReserve = 1073000191; // ~1.073B tokens (natural units)
+        uint256 k = virtualUsdtReserve * virtualTokenReserve; // k = 6,438,000,006,000
         
-        uint256 baseTokensPerUsdt = 80000e18; // 80,000 tokens per USDT
-        uint256 supplyFactor = currentSupply / 1e24; // Divide by 1e24 for scaling
+        // Convert wei amounts to natural units for calculation
+        uint256 currentUsdtRaisedNatural = currentUsdtRaised / 1e18;
+        uint256 usdtAmountNatural = usdtAmount / 1e18;
         
-        if (supplyFactor > 100) {
-            supplyFactor = 100; // Cap the price increase
-        }
+        // Current virtual state after previous purchases (natural units)
+        uint256 currentVirtualUsdtNatural = virtualUsdtReserve + currentUsdtRaisedNatural;
+        uint256 currentVirtualTokensNatural = k / currentVirtualUsdtNatural;
         
-        tokensToMint = (baseTokensPerUsdt * usdtAmount) / (1e18 + supplyFactor * 1e16);
+        // Virtual state after this purchase (natural units)
+        uint256 newVirtualUsdtNatural = currentVirtualUsdtNatural + usdtAmountNatural;
+        uint256 newVirtualTokensNatural = k / newVirtualUsdtNatural;
+        
+        // Tokens to mint in natural units
+        uint256 tokensToMintNatural = currentVirtualTokensNatural - newVirtualTokensNatural;
+        
+        // Convert back to wei for return
+        tokensToMint = tokensToMintNatural * 1e18;
         
         return tokensToMint;
     }
