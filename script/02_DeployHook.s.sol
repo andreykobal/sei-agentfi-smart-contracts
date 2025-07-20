@@ -19,20 +19,33 @@ contract DeployHookScript is BaseScript {
         console2.log("");
 
         // hook contracts must have specific flags encoded in the address
+        // These flags must match the getHookPermissions() in BondingCurve.sol
         uint160 flags = uint160(
-            Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
+            Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG 
+                | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
         console2.log("Hook flags:");
         console2.log("- BEFORE_SWAP_FLAG: true");
-        console2.log("- AFTER_SWAP_FLAG: true");
+        console2.log("- AFTER_SWAP_FLAG: false");
         console2.log("- BEFORE_ADD_LIQUIDITY_FLAG: true");
         console2.log("- BEFORE_REMOVE_LIQUIDITY_FLAG: true");
+        console2.log("- BEFORE_SWAP_RETURNS_DELTA_FLAG: true");
+        console2.log("");
+
+        // Get TokenFactory and USDT addresses from deployment file
+        string memory chainIdStr = vm.toString(block.chainid);
+        string memory deploymentPath = string.concat("deployments/", chainIdStr, ".json");
+        string memory json = vm.readFile(deploymentPath);
+        address tokenFactory = vm.parseJsonAddress(json, ".tokenFactory");
+        address usdtAddress = vm.parseJsonAddress(json, ".usdt");
+        
+        console2.log("TokenFactory:", tokenFactory);
+        console2.log("USDT Address:", usdtAddress);
         console2.log("");
 
         // Mine a salt that will produce a hook address with the correct flags
-        bytes memory constructorArgs = abi.encode(poolManager);
+        bytes memory constructorArgs = abi.encode(poolManager, tokenFactory, usdtAddress);
         console2.log("Mining hook address with correct flags...");
         (address hookAddress, bytes32 salt) =
             HookMiner.find(StdConstants.CREATE2_FACTORY, flags, type(BondingCurve).creationCode, constructorArgs);
@@ -43,7 +56,7 @@ contract DeployHookScript is BaseScript {
 
         // Deploy the hook using CREATE2
         vm.startBroadcast();
-        BondingCurve bondingCurve = new BondingCurve{salt: salt}(poolManager);
+        BondingCurve bondingCurve = new BondingCurve{salt: salt}(poolManager, tokenFactory, usdtAddress);
         vm.stopBroadcast();
 
         require(address(bondingCurve) == hookAddress, "DeployHookScript: Hook Address Mismatch");
@@ -78,8 +91,7 @@ contract DeployHookScript is BaseScript {
         vm.serializeAddress(json, "positionManager", vm.parseJsonAddress(existingJson, ".positionManager"));
         vm.serializeAddress(json, "v4Router", vm.parseJsonAddress(existingJson, ".v4Router"));
         vm.serializeAddress(json, "tokenFactory", vm.parseJsonAddress(existingJson, ".tokenFactory"));
-        vm.serializeAddress(json, "token0", vm.parseJsonAddress(existingJson, ".token0"));
-        vm.serializeAddress(json, "token1", vm.parseJsonAddress(existingJson, ".token1"));
+        vm.serializeAddress(json, "usdt", vm.parseJsonAddress(existingJson, ".usdt"));
         string memory finalJson = vm.serializeAddress(json, "hookContract", hookAddress);
         
         // Write updated file

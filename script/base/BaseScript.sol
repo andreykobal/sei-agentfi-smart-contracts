@@ -23,13 +23,9 @@ contract BaseScript is Script {
     /////////////////////////////////////
     // --- Auto-loaded from JSON ---
     /////////////////////////////////////
-    IERC20 immutable token0;
-    IERC20 immutable token1;
+    IERC20 immutable usdt;
     IHooks immutable hookContract;
     /////////////////////////////////////
-
-    Currency immutable currency0;
-    Currency immutable currency1;
 
     constructor() {
         // Load deployment addresses from JSON file
@@ -44,8 +40,7 @@ contract BaseScript is Script {
         poolManager = IPoolManager(vm.parseJsonAddress(json, ".poolManager"));
         positionManager = IPositionManager(payable(vm.parseJsonAddress(json, ".positionManager")));
         swapRouter = IUniswapV4Router04(payable(vm.parseJsonAddress(json, ".v4Router")));
-        token0 = IERC20(vm.parseJsonAddress(json, ".token0"));
-        token1 = IERC20(vm.parseJsonAddress(json, ".token1"));
+        usdt = IERC20(vm.parseJsonAddress(json, ".usdt"));
         
         // Hook contract is optional - default to address(0) if not deployed yet
         try vm.parseJsonAddress(json, ".hookContract") returns (address hookAddr) {
@@ -56,10 +51,7 @@ contract BaseScript is Script {
 
         deployerAddress = getDeployer();
 
-        (currency0, currency1) = getCurrencies();
-
-        vm.label(address(token0), "Token0 (USDT)");
-        vm.label(address(token1), "Token1 (TEST)");
+        vm.label(address(usdt), "USDT");
 
         vm.label(address(deployerAddress), "Deployer");
         vm.label(address(permit2), "Permit2");
@@ -68,21 +60,13 @@ contract BaseScript is Script {
         vm.label(address(swapRouter), "SwapRouter");
         
         if (address(hookContract) != address(0)) {
-            vm.label(address(hookContract), "HookContract (Counter)");
+            vm.label(address(hookContract), "HookContract (BondingCurve)");
         } else {
             vm.label(address(hookContract), "HookContract (Not Deployed)");
         }
     }
 
-    function getCurrencies() public view returns (Currency, Currency) {
-        require(address(token0) != address(token1));
 
-        if (token0 < token1) {
-            return (Currency.wrap(address(token0)), Currency.wrap(address(token1)));
-        } else {
-            return (Currency.wrap(address(token1)), Currency.wrap(address(token0)));
-        }
-    }
 
     function getDeployer() public returns (address) {
         address[] memory wallets = vm.getWallets();
