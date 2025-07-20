@@ -51,9 +51,15 @@ contract BondingCurve is BaseHook {
     mapping(address => uint256) public totalUsdtRaised; // Total USDT raised for each token
     mapping(PoolId => address) public poolToToken; // Map pool to its custom token address
     mapping(address => PoolKey) public tokenToPoolKey; // Map token to its pool key
+    mapping(address => bool) public liquidityAdded; // Track if liquidity has been added for a token
+    
+    // Constants
+    uint256 public constant LIQUIDITY_THRESHOLD = 800_000_000 * 1e18; // 800M tokens
+    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens
     
     // Events
     event TokenAndPoolCreated(address indexed token, address indexed creator, PoolId indexed poolId);
+    event LiquidityAdded(address indexed token, uint256 usdtAmount, uint256 tokenAmount);
 
     constructor(IPoolManager _poolManager, address _tokenFactory, address _usdt, IPositionManager _positionManager, IPermit2 _permit2) BaseHook(_poolManager) {
         tokenFactory = TokenFactory(_tokenFactory);
@@ -197,25 +203,30 @@ contract BondingCurve is BaseHook {
         // Mint tokens to user
         MockERC20(tokenAddress).mint(msg.sender, tokensReceived);
         
-        // Add liquidity to the pool with the USDT and some tokens
-        // This gradually builds liquidity instead of just accumulating USDT
-        _addLiquidityToPool(tokenAddress, usdtAmount);
-        
         // Update tracking
         totalMinted[tokenAddress] += tokensReceived;
         totalUsdtRaised[tokenAddress] += usdtAmount;
+        
+        // Check if we should add liquidity (800M+ tokens minted and not already added)
+        if (totalMinted[tokenAddress] >= LIQUIDITY_THRESHOLD && !liquidityAdded[tokenAddress]) {
+            _addLiquidityToPool(tokenAddress);
+            liquidityAdded[tokenAddress] = true;
+        }
         
         return tokensReceived;
     }
     
     /// @notice Internal function to add liquidity to the pool using PositionManager
     /// @param tokenAddress The token address
-    /// @param usdtAmount The amount of USDT to add as liquidity
-    function _addLiquidityToPool(address tokenAddress, uint256 usdtAmount) internal {
+    function _addLiquidityToPool(address tokenAddress) internal {
         PoolKey memory key = tokenToPoolKey[tokenAddress];
         
-        // Use minimal tokens for liquidity (essentially just USDT)
-        uint256 tokensForLiquidity = 1; // Just 1 wei of tokens
+        // Use all accumulated USDT for this token
+        uint256 usdtAmount = totalUsdtRaised[tokenAddress];
+        require(usdtAmount > 0, "No USDT to add as liquidity");
+        
+        // Use 200M tokens for liquidity
+        uint256 tokensForLiquidity = LIQUIDITY_TOKEN_AMOUNT;
         
         // Mint tokens for liquidity to this contract
         MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
@@ -276,6 +287,18 @@ contract BondingCurve is BaseHook {
         
         // Add liquidity through position manager
         positionManager.multicall(params);
+        
+        emit LiquidityAdded(tokenAddress, usdtAmount, tokensForLiquidity);
+    }
+    
+    /// @notice Manually trigger liquidity addition if threshold is met
+    /// @param tokenAddress The token address to add liquidity for
+    function addLiquidityIfReady(address tokenAddress) external {
+        require(totalMinted[tokenAddress] >= LIQUIDITY_THRESHOLD, "Threshold not met");
+        require(!liquidityAdded[tokenAddress], "Liquidity already added");
+        
+        _addLiquidityToPool(tokenAddress);
+        liquidityAdded[tokenAddress] = true;
     }
 
     // -----------------------------------------------
