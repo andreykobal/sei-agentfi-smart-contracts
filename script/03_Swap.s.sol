@@ -10,8 +10,8 @@ contract SwapScript is BaseScript {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000,
-            tickSpacing: 60,
+            fee: 5000,
+            tickSpacing: 100,
             hooks: hookContract // This must match the pool
         });
         bytes memory hookData = new bytes(0);
@@ -29,7 +29,7 @@ contract SwapScript is BaseScript {
             zeroForOne: true,
             poolKey: poolKey,
             hookData: hookData,
-            receiver: address(this),
+            receiver: deployerAddress, // ← FIXED: Use your wallet instead of script address
             deadline: block.timestamp + 1
         });
 
