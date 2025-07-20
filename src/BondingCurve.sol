@@ -145,6 +145,49 @@ contract BondingCurve is BaseHook {
         return tokensToMint;
     }
     
+    /// @notice Calculate the current price on the bonding curve (USDT per token)
+    /// @param tokenAddress The token address
+    /// @return priceUsdtPerToken The current price in USDT per token (in wei units)
+    function getCurrentBondingCurvePrice(address tokenAddress) public view returns (uint256 priceUsdtPerToken) {
+        uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
+        
+        // Same bonding curve constants as calculateTokensToMint
+        uint256 virtualUsdtReserve = 6000; // 6000 USDT (natural units)
+        uint256 virtualTokenReserve = 1073000191; // ~1.073B tokens (natural units)
+        uint256 k = virtualUsdtReserve * virtualTokenReserve; // k = 6,438,000,006,000
+        
+        // Convert wei to natural units for calculation
+        uint256 currentUsdtRaisedNatural = currentUsdtRaised / 1e18;
+        
+        // Current virtual state after all purchases (natural units)
+        uint256 currentVirtualUsdtNatural = virtualUsdtReserve + currentUsdtRaisedNatural;
+        uint256 currentVirtualTokensNatural = k / currentVirtualUsdtNatural;
+        
+        // Price = USDT / Token (in natural units)
+        // priceNatural = currentVirtualUsdtNatural / currentVirtualTokensNatural
+        // Convert to wei: multiply by 1e18
+        priceUsdtPerToken = (currentVirtualUsdtNatural * 1e18) / currentVirtualTokensNatural;
+        
+        return priceUsdtPerToken;
+    }
+    
+    /// @notice Calculate integer square root using Newton's method
+    /// @param x The input value
+    /// @return result The square root of x
+    function sqrt(uint256 x) internal pure returns (uint256 result) {
+        if (x == 0) return 0;
+        
+        // Initial guess
+        result = x;
+        uint256 k = (x >> 1) + 1;
+        
+        // Newton's method iterations
+        while (k < result) {
+            result = k;
+            k = (x / k + k) >> 1;
+        }
+    }
+    
     /// @notice Check if a token has graduated (liquidity added to pool)
     /// @param tokenAddress The token address to check
     /// @return graduated True if token has graduated and liquidity is available for normal swaps
@@ -261,20 +304,26 @@ contract BondingCurve is BaseHook {
         // Mint tokens for liquidity to this contract
         MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
         
-        // Calculate target price ratio: 200M tokens for 20K USDT = 10,000 tokens per USDT
-        // Following the demo script pattern: sqrt(price) * 2^96
+        // Get current bonding curve price (USDT per token in wei)
+        uint256 usdtPerTokenWei = getCurrentBondingCurvePrice(tokenAddress);
+        
+        // Calculate sqrtPriceX96 using Uniswap V3 formula: sqrtPriceX96 = sqrt(price) × 2^96
         uint160 sqrtPriceX96;
         
         if (Currency.unwrap(key.currency0) == tokenAddress) {
             // token is currency0, USDT is currency1
-            // price = USDT/token = 20K/200M = 0.0001
-            // sqrtPriceX96 = sqrt(0.0001) * 2^96 = 0.01 * 2^96
-            sqrtPriceX96 = 792281625142643375935439503; // 0.01 * 2^96
+            // price = currency1/currency0 = USDT/token 
+            // Convert wei to actual price: actualPrice = usdtPerTokenWei / 1e18
+            // sqrtPriceX96 = sqrt(actualPrice) × 2^96 = sqrt(usdtPerTokenWei / 1e18) × 2^96
+            uint256 sqrtPrice = sqrt(usdtPerTokenWei); // sqrt of price in wei
+            sqrtPriceX96 = uint160((sqrtPrice * (2**96)) / 1e9); // Divide by sqrt(1e18) = 1e9
         } else {
             // USDT is currency0, token is currency1  
-            // price = token/USDT = 200M/20K = 10,000
-            // sqrtPriceX96 = sqrt(10000) * 2^96 = 100 * 2^96  
-            sqrtPriceX96 = 7922816251426433759354395033600; // 100 * 2^96
+            // price = currency1/currency0 = token/USDT = 1/actualPrice
+            // actualPrice = usdtPerTokenWei / 1e18, so inversePrice = 1e18 / usdtPerTokenWei  
+            // sqrtPriceX96 = sqrt(1e18 / usdtPerTokenWei) × 2^96
+            uint256 sqrtInversePrice = sqrt((1e18 * 1e18) / usdtPerTokenWei); // sqrt of inverse price in wei
+            sqrtPriceX96 = uint160((sqrtInversePrice * (2**96)) / 1e9); // Divide by sqrt(1e18) = 1e9
         }
         
         // Create the pool with the starting sqrt price
