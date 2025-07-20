@@ -11,11 +11,10 @@ import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionMa
 import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 
 import {IUniswapV4Router04} from "hookmate/interfaces/router/IUniswapV4Router04.sol";
-import {AddressConstants} from "hookmate/constants/AddressConstants.sol";
 
 /// @notice Shared configuration between scripts
 contract BaseScript is Script {
-    IPermit2 immutable permit2 = IPermit2(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+    IPermit2 immutable permit2;
     IPoolManager immutable poolManager;
     IPositionManager immutable positionManager;
     IUniswapV4Router04 immutable swapRouter;
@@ -24,8 +23,8 @@ contract BaseScript is Script {
     /////////////////////////////////////
     // --- Configure These ---
     /////////////////////////////////////
-    IERC20 internal constant token0 = IERC20(0x0165878A594ca255338adfa4d48449f69242Eb8F);
-    IERC20 internal constant token1 = IERC20(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853);
+    IERC20 immutable token0;
+    IERC20 immutable token1;
     IHooks constant hookContract = IHooks(address(0));
     /////////////////////////////////////
 
@@ -33,25 +32,37 @@ contract BaseScript is Script {
     Currency immutable currency1;
 
     constructor() {
-        poolManager = IPoolManager(AddressConstants.getPoolManagerAddress(block.chainid));
-        positionManager = IPositionManager(payable(AddressConstants.getPositionManagerAddress(block.chainid)));
-        swapRouter = IUniswapV4Router04(payable(AddressConstants.getV4SwapRouterAddress(block.chainid)));
+        // Load deployment addresses from JSON file
+        string memory chainIdStr = vm.toString(block.chainid);
+        string memory deploymentPath = string.concat("deployments/", chainIdStr, ".json");
+        
+        require(vm.exists(deploymentPath), string.concat("Deployment file not found: ", deploymentPath));
+        
+        string memory json = vm.readFile(deploymentPath);
+        
+        permit2 = IPermit2(vm.parseJsonAddress(json, ".permit2"));
+        poolManager = IPoolManager(vm.parseJsonAddress(json, ".poolManager"));
+        positionManager = IPositionManager(payable(vm.parseJsonAddress(json, ".positionManager")));
+        swapRouter = IUniswapV4Router04(payable(vm.parseJsonAddress(json, ".v4Router")));
+        token0 = IERC20(vm.parseJsonAddress(json, ".token0"));
+        token1 = IERC20(vm.parseJsonAddress(json, ".token1"));
 
         deployerAddress = getDeployer();
 
         (currency0, currency1) = getCurrencies();
 
-        vm.label(address(token0), "Token0");
-        vm.label(address(token1), "Token1");
+        vm.label(address(token0), "Token0 (TKA)");
+        vm.label(address(token1), "Token1 (TKB)");
 
         vm.label(address(deployerAddress), "Deployer");
+        vm.label(address(permit2), "Permit2");
         vm.label(address(poolManager), "PoolManager");
         vm.label(address(positionManager), "PositionManager");
         vm.label(address(swapRouter), "SwapRouter");
         vm.label(address(hookContract), "HookContract");
     }
 
-    function getCurrencies() public pure returns (Currency, Currency) {
+    function getCurrencies() public view returns (Currency, Currency) {
         require(address(token0) != address(token1));
 
         if (token0 < token1) {
