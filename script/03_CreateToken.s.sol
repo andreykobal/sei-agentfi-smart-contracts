@@ -43,6 +43,9 @@ contract CreateToken is BaseScript {
         // Get token details
         MockERC20 newToken = MockERC20(tokenAddress);
         
+        // Save token address to JSON
+        saveTokenToJson(tokenAddress);
+        
         // Log the results
         console.log("=== Token Created Successfully ===");
         console.log("Token Address:", tokenAddress);
@@ -61,7 +64,7 @@ contract CreateToken is BaseScript {
         console.log("- Graduation threshold: 200M tokens");
         console.log("");
         console.log("=== Next Steps ===");
-        console.log("1. Update 05_Swap.s.sol OTHER_TOKEN constant to:", tokenAddress);
+        console.log("1. Token address automatically saved to deployments JSON");
         console.log("2. Run 05_Swap.s.sol to buy tokens using bonding curve");
         console.log("3. Token price will increase with each purchase!");
         console.log("4. At 200M tokens, pool will be created automatically!");
@@ -77,5 +80,33 @@ contract CreateToken is BaseScript {
         console.log("Example Pricing (current):");
         console.log("- 100 USDT would get:", exampleTokens100, "tokens");
         console.log("- 1000 USDT would get:", exampleTokens1000, "tokens");
+    }
+
+    function saveTokenToJson(address tokenAddress) internal {
+        // Read existing deployment file
+        string memory chainIdStr = vm.toString(block.chainid);
+        string memory deploymentPath = string.concat("deployments/", chainIdStr, ".json");
+        
+        require(vm.exists(deploymentPath), string.concat("Deployment file not found: ", deploymentPath));
+        
+        string memory existingJson = vm.readFile(deploymentPath);
+        
+        // Create new JSON with memecoin token address added
+        string memory json = "deployment";
+        vm.serializeUint(json, "chainId", vm.parseJsonUint(existingJson, ".chainId"));
+        vm.serializeAddress(json, "permit2", vm.parseJsonAddress(existingJson, ".permit2"));
+        vm.serializeAddress(json, "poolManager", vm.parseJsonAddress(existingJson, ".poolManager"));
+        vm.serializeAddress(json, "positionManager", vm.parseJsonAddress(existingJson, ".positionManager"));
+        vm.serializeAddress(json, "v4Router", vm.parseJsonAddress(existingJson, ".v4Router"));
+        vm.serializeAddress(json, "tokenFactory", vm.parseJsonAddress(existingJson, ".tokenFactory"));
+        vm.serializeAddress(json, "usdt", vm.parseJsonAddress(existingJson, ".usdt"));
+        vm.serializeAddress(json, "hookContract", vm.parseJsonAddress(existingJson, ".hookContract"));
+        string memory finalJson = vm.serializeAddress(json, "memecoinToken", tokenAddress);
+        
+        // Write updated file
+        vm.writeFile(deploymentPath, finalJson);
+        
+        console.log("Memecoin token address saved to:", deploymentPath);
+        console.log("");
     }
 }

@@ -11,21 +11,22 @@ import {BondingCurve} from "../src/BondingCurve.sol";
 import {MockERC20} from "../src/MockERC20.sol";
 
 contract SwapScript is BaseScript {
-    // Hardcoded second token address - update this as needed
-    address constant OTHER_TOKEN = 0x38E35E18852911EBae1FE14E78c8dabFf328F7Ed; // Update this address as needed
     
     function run() external {
         uint256 usdtAmount = 5000e18; // 5000 USDT (18 decimals)
         
+        // Check if memecoin token has been created
+        require(address(memecoinToken) != address(0), "Memecoin token not created yet. Run 03_CreateToken.s.sol first.");
+        
         console.log("=== Bonding Curve Token Purchase ===");
         console.log("USDT Address:", address(usdt));
-        console.log("Token to Buy:", OTHER_TOKEN);
+        console.log("Token to Buy:", address(memecoinToken));
         console.log("USDT Amount:", usdtAmount);
         console.log("Buyer:", deployerAddress);
         console.log("");
 
         // Get the token contract and bonding curve contract
-        MockERC20 targetToken = MockERC20(OTHER_TOKEN);
+        MockERC20 targetToken = MockERC20(address(memecoinToken));
         BondingCurve bondingCurve = BondingCurve(address(hookContract));
         
         // Check balances before purchase
@@ -38,19 +39,19 @@ contract SwapScript is BaseScript {
         console.log("");
         
         // Check current price before purchase
-        uint256 tokensExpected = bondingCurve.calculateTokensToMint(OTHER_TOKEN, usdtAmount);
+        uint256 tokensExpected = bondingCurve.calculateTokensToMint(address(memecoinToken), usdtAmount);
         console.log("Tokens Expected:", tokensExpected);
         
         // Show current bonding curve price
-        uint256 currentPrice = bondingCurve.calculateTokensToMint(OTHER_TOKEN, 1e18);
+        uint256 currentPrice = bondingCurve.calculateTokensToMint(address(memecoinToken), 1e18);
         console.log("");
         console.log("=== Current Bonding Curve Price ===");
         console.log("Price: 1 USDT =", currentPrice / 1e18, "tokens");
-        console.log("Total minted so far:", bondingCurve.totalMinted(OTHER_TOKEN) / 1e18, "tokens");
-        console.log("Total USDT raised so far:", bondingCurve.totalUsdtRaised(OTHER_TOKEN) / 1e18, "USDT");
+        console.log("Total minted so far:", bondingCurve.totalMinted(address(memecoinToken)) / 1e18, "tokens");
+        console.log("Total USDT raised so far:", bondingCurve.totalUsdtRaised(address(memecoinToken)) / 1e18, "USDT");
         
         // Check if token is already graduated
-        bool preGraduated = bondingCurve.isTokenGraduated(OTHER_TOKEN);
+        bool preGraduated = bondingCurve.isTokenGraduated(address(memecoinToken));
         if (preGraduated) {
             console.log("WARNING: Token already graduated - cannot use buyTokens!");
             console.log("Use normal Uniswap swaps instead.");
@@ -64,7 +65,7 @@ contract SwapScript is BaseScript {
         usdt.approve(address(bondingCurve), usdtAmount);
         
         // Buy tokens using bonding curve (mints directly)
-        uint256 tokensReceived = bondingCurve.buyTokens(OTHER_TOKEN, usdtAmount);
+        uint256 tokensReceived = bondingCurve.buyTokens(address(memecoinToken), usdtAmount);
         
         vm.stopBroadcast();
         
@@ -77,12 +78,12 @@ contract SwapScript is BaseScript {
         uint256 tokensGained = tokenBalanceAfter - tokenBalanceBefore;
         
         // Get updated bonding curve stats
-        uint256 totalMinted = bondingCurve.totalMinted(OTHER_TOKEN);
-        uint256 totalRaised = bondingCurve.totalUsdtRaised(OTHER_TOKEN);
+        uint256 totalMinted = bondingCurve.totalMinted(address(memecoinToken));
+        uint256 totalRaised = bondingCurve.totalUsdtRaised(address(memecoinToken));
         
         // Check graduation status
         (bool isGraduated, uint256 tokensMinted, uint256 tokensUntilGraduation, uint256 progressPercent) = 
-            bondingCurve.getGraduationStatus(OTHER_TOKEN);
+            bondingCurve.getGraduationStatus(address(memecoinToken));
         
         // Log results
         console.log("=== Balances After Purchase ===");
@@ -120,7 +121,7 @@ contract SwapScript is BaseScript {
         console.log("");
         
         // Show new bonding curve price after purchase
-        uint256 newPrice = bondingCurve.calculateTokensToMint(OTHER_TOKEN, 1e18);
+        uint256 newPrice = bondingCurve.calculateTokensToMint(address(memecoinToken), 1e18);
         console.log("=== Price Impact Analysis ===");
         console.log("Price before: 1 USDT =", currentPrice / 1e18, "tokens");
         console.log("Price after: 1 USDT =", newPrice / 1e18, "tokens");
@@ -142,7 +143,7 @@ contract SwapScript is BaseScript {
         console.log("");
         
         // Show next purchase price
-        uint256 nextTokens = bondingCurve.calculateTokensToMint(OTHER_TOKEN, usdtAmount);
+        uint256 nextTokens = bondingCurve.calculateTokensToMint(address(memecoinToken), usdtAmount);
         console.log("=== Next Purchase Preview ===");
         console.log("Next purchase amount:", usdtAmount / 1e18, "USDT");
         console.log("Would get (raw):", nextTokens, "tokens");

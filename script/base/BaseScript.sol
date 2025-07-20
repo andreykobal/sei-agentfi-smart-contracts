@@ -25,6 +25,7 @@ contract BaseScript is Script {
     /////////////////////////////////////
     IERC20 immutable usdt;
     IHooks immutable hookContract;
+    IERC20 immutable memecoinToken;
     /////////////////////////////////////
 
     constructor() {
@@ -49,6 +50,13 @@ contract BaseScript is Script {
             hookContract = IHooks(address(0));
         }
 
+        // Memecoin token is optional - default to address(0) if not created yet
+        try vm.parseJsonAddress(json, ".memecoinToken") returns (address memecoinAddr) {
+            memecoinToken = IERC20(memecoinAddr);
+        } catch {
+            memecoinToken = IERC20(address(0));
+        }
+
         deployerAddress = getDeployer();
 
         vm.label(address(usdt), "USDT");
@@ -63,6 +71,12 @@ contract BaseScript is Script {
             vm.label(address(hookContract), "HookContract (BondingCurve)");
         } else {
             vm.label(address(hookContract), "HookContract (Not Deployed)");
+        }
+
+        if (address(memecoinToken) != address(0)) {
+            vm.label(address(memecoinToken), "MemecoinToken");
+        } else {
+            vm.label(address(memecoinToken), "MemecoinToken (Not Created)");
         }
     }
 

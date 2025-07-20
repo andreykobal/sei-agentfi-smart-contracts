@@ -11,32 +11,33 @@ import {BondingCurve} from "../src/BondingCurve.sol";
 import {MockERC20} from "../src/MockERC20.sol";
 
 contract NormalSwapScript is BaseScript {
-    // Hardcoded token address - update this to a GRADUATED token
-    address constant GRADUATED_TOKEN = 0x38E35E18852911EBae1FE14E78c8dabFf328F7Ed; // Update this to graduated token
     
     function run() external {
         uint256 usdtAmount = 1000e18; // 1000 USDT (18 decimals)
         
+        // Check if memecoin token has been created
+        require(address(memecoinToken) != address(0), "Memecoin token not created yet. Run 03_CreateToken.s.sol first.");
+        
         console.log("=== Normal Uniswap Swap (Graduated Token) ===");
         console.log("USDT Address:", address(usdt));
-        console.log("Token to Buy:", GRADUATED_TOKEN);
+        console.log("Token to Buy:", address(memecoinToken));
         console.log("USDT Amount:", usdtAmount);
         console.log("Buyer:", deployerAddress);
         console.log("");
 
         // Get contracts
-        MockERC20 targetToken = MockERC20(GRADUATED_TOKEN);
+        MockERC20 targetToken = MockERC20(address(memecoinToken));
         BondingCurve bondingCurve = BondingCurve(address(hookContract));
         
         // Check if token is graduated
-        bool isGraduated = bondingCurve.isTokenGraduated(GRADUATED_TOKEN);
+        bool isGraduated = bondingCurve.isTokenGraduated(address(memecoinToken));
         if (!isGraduated) {
             console.log("ERROR: Token has not graduated yet!");
             console.log("Use 05_Swap.s.sol (buyTokens) instead.");
             
             // Show graduation status
             (, uint256 tokensMinted, uint256 tokensUntilGraduation, uint256 progressPercent) = 
-                bondingCurve.getGraduationStatus(GRADUATED_TOKEN);
+                bondingCurve.getGraduationStatus(address(memecoinToken));
             console.log("Current Progress:", progressPercent, "% to graduation");
             console.log("Tokens until graduation:", tokensUntilGraduation / 1e18, "tokens");
             return;
@@ -46,8 +47,8 @@ contract NormalSwapScript is BaseScript {
         console.log("");
         
         // Show what bonding curve would give (for comparison)
-        uint256 bondingCurveWouldGive = bondingCurve.calculateTokensToMint(GRADUATED_TOKEN, usdtAmount);
-        uint256 bondingCurvePrice = bondingCurve.calculateTokensToMint(GRADUATED_TOKEN, 1e18);
+        uint256 bondingCurveWouldGive = bondingCurve.calculateTokensToMint(address(memecoinToken), usdtAmount);
+        uint256 bondingCurvePrice = bondingCurve.calculateTokensToMint(address(memecoinToken), 1e18);
         
         console.log("=== Price Comparison (Bonding Curve vs AMM) ===");
         console.log("If bonding curve was still active:");
@@ -70,21 +71,21 @@ contract NormalSwapScript is BaseScript {
         PoolKey memory poolKey;
         bool zeroForOne;
         
-        // Determine currency ordering - USDT vs GRADUATED_TOKEN
-        if (address(usdt) < GRADUATED_TOKEN) {
-            // USDT is currency0, GRADUATED_TOKEN is currency1
+        // Determine currency ordering - USDT vs memecoinToken
+        if (address(usdt) < address(memecoinToken)) {
+            // USDT is currency0, memecoinToken is currency1
             poolKey = PoolKey({
                 currency0: Currency.wrap(address(usdt)),
-                currency1: Currency.wrap(GRADUATED_TOKEN),
+                currency1: Currency.wrap(address(memecoinToken)),
                 fee: 3000,
                 tickSpacing: 60,
                 hooks: hookContract
             });
             zeroForOne = true; // Swapping from USDT (currency0) to tokens (currency1)
         } else {
-            // GRADUATED_TOKEN is currency0, USDT is currency1
+            // memecoinToken is currency0, USDT is currency1
             poolKey = PoolKey({
-                currency0: Currency.wrap(GRADUATED_TOKEN),
+                currency0: Currency.wrap(address(memecoinToken)),
                 currency1: Currency.wrap(address(usdt)),
                 fee: 3000,
                 tickSpacing: 60,
@@ -149,8 +150,8 @@ contract NormalSwapScript is BaseScript {
         console.log("");
         
         // Show final graduation stats
-        uint256 totalMinted = bondingCurve.totalMinted(GRADUATED_TOKEN);
-        uint256 totalRaised = bondingCurve.totalUsdtRaised(GRADUATED_TOKEN);
+        uint256 totalMinted = bondingCurve.totalMinted(address(memecoinToken));
+        uint256 totalRaised = bondingCurve.totalUsdtRaised(address(memecoinToken));
         
         console.log("=== Token Stats (Graduated) ===");
         console.log("Total Minted via Bonding Curve:", totalMinted / 1e18, "tokens");
