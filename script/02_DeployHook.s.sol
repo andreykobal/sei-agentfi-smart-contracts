@@ -70,24 +70,16 @@ contract DeployHookScript is BaseScript {
         
         string memory existingJson = vm.readFile(deploymentPath);
         
-        // Parse existing addresses
-        uint256 chainId = vm.parseJsonUint(existingJson, ".chainId");
-        address permit2 = vm.parseJsonAddress(existingJson, ".permit2");
-        address poolManagerAddr = vm.parseJsonAddress(existingJson, ".poolManager");
-        address positionManagerAddr = vm.parseJsonAddress(existingJson, ".positionManager");
-        address v4RouterAddr = vm.parseJsonAddress(existingJson, ".v4Router");
-        address token0Addr = vm.parseJsonAddress(existingJson, ".token0");
-        address token1Addr = vm.parseJsonAddress(existingJson, ".token1");
-
-        // Create new JSON with hook address added
+        // Create new JSON with hook address added - serialize directly to avoid stack too deep
         string memory json = "deployment";
-        vm.serializeUint(json, "chainId", chainId);
-        vm.serializeAddress(json, "permit2", permit2);
-        vm.serializeAddress(json, "poolManager", poolManagerAddr);
-        vm.serializeAddress(json, "positionManager", positionManagerAddr);
-        vm.serializeAddress(json, "v4Router", v4RouterAddr);
-        vm.serializeAddress(json, "token0", token0Addr);
-        vm.serializeAddress(json, "token1", token1Addr);
+        vm.serializeUint(json, "chainId", vm.parseJsonUint(existingJson, ".chainId"));
+        vm.serializeAddress(json, "permit2", vm.parseJsonAddress(existingJson, ".permit2"));
+        vm.serializeAddress(json, "poolManager", vm.parseJsonAddress(existingJson, ".poolManager"));
+        vm.serializeAddress(json, "positionManager", vm.parseJsonAddress(existingJson, ".positionManager"));
+        vm.serializeAddress(json, "v4Router", vm.parseJsonAddress(existingJson, ".v4Router"));
+        vm.serializeAddress(json, "tokenFactory", vm.parseJsonAddress(existingJson, ".tokenFactory"));
+        vm.serializeAddress(json, "token0", vm.parseJsonAddress(existingJson, ".token0"));
+        vm.serializeAddress(json, "token1", vm.parseJsonAddress(existingJson, ".token1"));
         string memory finalJson = vm.serializeAddress(json, "hookContract", hookAddress);
         
         // Write updated file
