@@ -55,7 +55,7 @@ contract BondingCurve is BaseHook {
     
     // Constants
     uint256 public constant USDT_GRADUATION_THRESHOLD = 20_000 * 1e18; // 20K USDT
-    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens for pool
+    uint256 public constant TOTAL_TOKEN_SUPPLY = 1_000_000_000 * 1e18; // 1B total token supply
     
     // Events
     event TokenCreated(address indexed token, address indexed creator, string name, string symbol);
@@ -298,8 +298,10 @@ contract BondingCurve is BaseHook {
         uint256 usdtAmount = totalUsdtRaised[tokenAddress];
         require(usdtAmount > 0, "No USDT to add as liquidity");
         
-        // Fixed amount of tokens for liquidity (200M tokens)
-        uint256 tokensForLiquidity = 200_000_000 * 1e18; // 200M tokens
+        // Calculate remaining tokens for liquidity (1B total - already minted)
+        uint256 alreadyMinted = totalMinted[tokenAddress];
+        require(alreadyMinted < TOTAL_TOKEN_SUPPLY, "Total supply exceeded");
+        uint256 tokensForLiquidity = TOTAL_TOKEN_SUPPLY - alreadyMinted;
         
         // Mint tokens for liquidity to this contract
         MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
