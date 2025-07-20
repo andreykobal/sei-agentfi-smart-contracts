@@ -21,11 +21,11 @@ contract BaseScript is Script {
     address immutable deployerAddress;
 
     /////////////////////////////////////
-    // --- Configure These ---
+    // --- Auto-loaded from JSON ---
     /////////////////////////////////////
     IERC20 immutable token0;
     IERC20 immutable token1;
-    IHooks constant hookContract = IHooks(address(0));
+    IHooks immutable hookContract;
     /////////////////////////////////////
 
     Currency immutable currency0;
@@ -46,6 +46,13 @@ contract BaseScript is Script {
         swapRouter = IUniswapV4Router04(payable(vm.parseJsonAddress(json, ".v4Router")));
         token0 = IERC20(vm.parseJsonAddress(json, ".token0"));
         token1 = IERC20(vm.parseJsonAddress(json, ".token1"));
+        
+        // Hook contract is optional - default to address(0) if not deployed yet
+        try vm.parseJsonAddress(json, ".hookContract") returns (address hookAddr) {
+            hookContract = IHooks(hookAddr);
+        } catch {
+            hookContract = IHooks(address(0));
+        }
 
         deployerAddress = getDeployer();
 
@@ -59,7 +66,12 @@ contract BaseScript is Script {
         vm.label(address(poolManager), "PoolManager");
         vm.label(address(positionManager), "PositionManager");
         vm.label(address(swapRouter), "SwapRouter");
-        vm.label(address(hookContract), "HookContract");
+        
+        if (address(hookContract) != address(0)) {
+            vm.label(address(hookContract), "HookContract (Counter)");
+        } else {
+            vm.label(address(hookContract), "HookContract (Not Deployed)");
+        }
     }
 
     function getCurrencies() public view returns (Currency, Currency) {

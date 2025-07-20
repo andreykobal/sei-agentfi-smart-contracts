@@ -69,13 +69,14 @@ cat deployments/31337.json
   "positionManager": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   "v4Router": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
   "token0": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
-  "token1": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
+  "token1": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+  "hookContract": "0x1234567890abcdef1234567890abcdef12345678"
 }
 ```
 
-### 5. Deploy Hooks (Now Works!)
+### 5. Deploy Hooks (Auto-saves to JSON!)
 
-Now `BaseScript.sol` can load the addresses, so hook deployment works:
+Now `BaseScript.sol` can load the addresses, and hook deployment automatically saves to JSON:
 
 ```bash
 forge script script/00_DeployHook.s.sol \
@@ -84,7 +85,27 @@ forge script script/00_DeployHook.s.sol \
   --private-key $PRIVATE_KEY
 ```
 
-### 6. Use Other Scripts
+This will:
+
+- Mine a hook address with the correct flags
+- Deploy your Counter hook
+- **Automatically add the hook address to the JSON file**
+- Update `BaseScript.sol` to use your hook in future scripts
+
+### 6. Create Pools with Your Hook
+
+After deploying your hook, create a pool that uses it:
+
+```bash
+forge script script/01_CreatePoolAndAddLiquidity.s.sol \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --private-key $PRIVATE_KEY
+```
+
+This creates a pool using your deployed hook - every swap and liquidity operation will trigger your hook logic!
+
+### 7. Use Other Scripts
 
 All scripts that inherit from `BaseScript` now automatically work:
 
