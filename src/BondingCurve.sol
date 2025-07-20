@@ -73,9 +73,9 @@ contract BondingCurve is BaseHook {
         return Hooks.Permissions({
             beforeInitialize: false,
             afterInitialize: false,
-            beforeAddLiquidity: true,
+            beforeAddLiquidity: false,  // Disabled - use normal Uniswap flow
             afterAddLiquidity: false,
-            beforeRemoveLiquidity: true,
+            beforeRemoveLiquidity: false,  // Disabled - use normal Uniswap flow
             afterRemoveLiquidity: false,
             beforeSwap: true,
             afterSwap: false,
@@ -412,38 +412,26 @@ contract BondingCurve is BaseHook {
     // NOTE: see IHooks.sol for function documentation
     // -----------------------------------------------
 
-    function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        // Simple passthrough - let all swaps proceed normally
-        // Bonding curve logic is handled by the separate buyTokens() function
+        // Get the token address for this pool
+        PoolId poolId = key.toId();
+        address tokenAddress = poolToToken[poolId];
+        
+        // If this is one of our bonding curve tokens, check graduation status
+        if (tokenAddress != address(0)) {
+            require(liquidityAdded[tokenAddress], "Token still in bonding curve phase - use buyTokens() instead of swaps");
+        }
+        
+        // Allow swap to proceed normally for graduated tokens
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function _afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
-        internal
-        override
-        returns (bytes4, int128)
-    {
-        return (this.afterSwap.selector, 0);
-    }
 
-    function _beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        return this.beforeAddLiquidity.selector;
-    }
 
-    function _beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        return this.beforeRemoveLiquidity.selector;
-    }
+
 
 }

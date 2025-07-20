@@ -30,18 +30,18 @@ contract NormalSwapScript is BaseScript {
         BondingCurve bondingCurve = BondingCurve(address(hookContract));
         
         // Check if token is graduated
-        bool isGraduated = bondingCurve.isTokenGraduated(address(memecoinToken));
-        if (!isGraduated) {
-            console.log("ERROR: Token has not graduated yet!");
-            console.log("Use 05_Swap.s.sol (buyTokens) instead.");
+        // bool isGraduated = bondingCurve.isTokenGraduated(address(memecoinToken));
+        // if (!isGraduated) {
+        //     console.log("ERROR: Token has not graduated yet!");
+        //     console.log("Use 05_Swap.s.sol (buyTokens) instead.");
             
-            // Show graduation status
-            (, uint256 usdtRaised, uint256 usdtUntilGraduation, uint256 progressPercent) = 
-                bondingCurve.getGraduationStatus(address(memecoinToken));
-            console.log("Current Progress:", progressPercent, "% to graduation");
-            console.log("USDT until graduation:", usdtUntilGraduation / 1e18, "USDT");
-            return;
-        }
+        //     // Show graduation status
+        //     (, uint256 usdtRaised, uint256 usdtUntilGraduation, uint256 progressPercent) = 
+        //         bondingCurve.getGraduationStatus(address(memecoinToken));
+        //     console.log("Current Progress:", progressPercent, "% to graduation");
+        //     console.log("USDT until graduation:", usdtUntilGraduation / 1e18, "USDT");
+        //     return;
+        // }
         
         console.log("Token is graduated - proceeding with normal swap");
         console.log("");

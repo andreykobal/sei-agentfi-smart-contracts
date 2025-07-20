@@ -23,15 +23,14 @@ contract DeployHookScript is BaseScript {
         // hook contracts must have specific flags encoded in the address
         // These flags must match the getHookPermissions() in BondingCurve.sol
         uint160 flags = uint160(
-            Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG 
-                | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
+            Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         );
 
         console2.log("Hook flags:");
-        console2.log("- BEFORE_SWAP_FLAG: true");
+        console2.log("- BEFORE_SWAP_FLAG: true (prevents swaps during bonding curve phase)");
         console2.log("- AFTER_SWAP_FLAG: false");
-        console2.log("- BEFORE_ADD_LIQUIDITY_FLAG: true");
-        console2.log("- BEFORE_REMOVE_LIQUIDITY_FLAG: true");
+        console2.log("- BEFORE_ADD_LIQUIDITY_FLAG: false (disabled - uses normal Uniswap flow)");
+        console2.log("- BEFORE_REMOVE_LIQUIDITY_FLAG: false (disabled - uses normal Uniswap flow)");
         console2.log("- BEFORE_SWAP_RETURNS_DELTA_FLAG: true");
         console2.log("");
 
@@ -76,8 +75,10 @@ contract DeployHookScript is BaseScript {
         saveHookToJson(address(bondingCurve));
 
         console2.log("=== Next Steps ===");
-        console2.log("1. Run 01_CreatePoolAndAddLiquidity.s.sol to create a pool with your hook");
-        console2.log("2. The hook will be called on every swap and liquidity operation!");
+        console2.log("1. Create tokens using bondingCurve.createToken()");
+        console2.log("2. Users buy tokens via bondingCurve.buyTokens() (bonding curve phase)");
+        console2.log("3. After 20K USDT raised, tokens graduate and normal Uniswap trading begins");
+        console2.log("4. Hook prevents swaps during bonding curve phase, allows normal trading after graduation");
     }
 
     function saveHookToJson(address hookAddress) internal {
