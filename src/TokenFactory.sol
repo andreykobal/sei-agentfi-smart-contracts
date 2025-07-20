@@ -7,22 +7,6 @@ import {MockERC20} from "./MockERC20.sol";
 /// @notice Factory contract for creating ERC20 tokens
 /// @dev Anyone can use this factory to create tokens with specified parameters
 contract TokenFactory {
-    /// @notice Event emitted when a new token is created
-    /// @param tokenAddress The address of the newly created token
-    /// @param creator The address of the token creator
-    /// @param name The name of the token
-    /// @param symbol The symbol of the token
-    /// @param decimals The number of decimals for the token
-    /// @param initialSupply The initial supply minted to the creator
-    event TokenCreated(
-        address indexed tokenAddress,
-        address indexed creator,
-        string name,
-        string symbol,
-        uint8 decimals,
-        uint256 initialSupply
-    );
-
     /// @notice Array to store all created token addresses
     address[] public createdTokens;
 
@@ -34,12 +18,24 @@ contract TokenFactory {
     /// @param symbol The symbol of the token
     /// @param decimals The number of decimals for the token
     /// @param initialSupply The initial supply to mint to the creator
+    /// @param description A description of the token (not used in factory, passed through)
+    /// @param image URL to the token's image/logo (not used in factory, passed through)
+    /// @param website Official website URL (not used in factory, passed through)
+    /// @param twitter Twitter handle or URL (not used in factory, passed through)
+    /// @param telegram Telegram group/channel URL (not used in factory, passed through)
+    /// @param discord Discord server URL (not used in factory, passed through)
     /// @return tokenAddress The address of the newly created token
     function createToken(
         string memory name,
         string memory symbol,
         uint8 decimals,
-        uint256 initialSupply
+        uint256 initialSupply,
+        string memory description,
+        string memory image,
+        string memory website,
+        string memory twitter,
+        string memory telegram,
+        string memory discord
     ) external returns (address tokenAddress) {
         // Deploy new MockERC20 token
         MockERC20 newToken = new MockERC20(
@@ -56,16 +52,7 @@ contract TokenFactory {
         createdTokens.push(tokenAddress);
         isFactoryToken[tokenAddress] = true;
 
-        // Emit event with token creation details
-        emit TokenCreated(
-            tokenAddress,
-            msg.sender,
-            name,
-            symbol,
-            decimals,
-            initialSupply
-        );
-
+        // Note: TokenCreated event is now emitted by the calling contract (BondingCurve)
         return tokenAddress;
     }
 

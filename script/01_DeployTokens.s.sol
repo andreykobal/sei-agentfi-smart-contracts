@@ -58,7 +58,13 @@ contract DeployTokens is Script {
             "Tether USD",
             "USDT",
             18, // USDT using 18 decimals for this implementation
-            USDT_SUPPLY
+            USDT_SUPPLY,
+            "Tether USD (USDT) is a stablecoin cryptocurrency backed by traditional fiat currencies.", // description
+            "https://assets.coingecko.com/coins/images/325/large/Tether.png", // image
+            "https://tether.to", // website
+            "https://twitter.com/Tether_to", // twitter
+            "https://t.me/tethertous", // telegram
+            "" // discord (empty for USDT)
         );
         
         usdt = MockERC20(usdtAddress);

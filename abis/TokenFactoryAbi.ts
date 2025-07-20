@@ -22,6 +22,36 @@ export const TokenFactoryAbi = [
         name: "initialSupply",
         type: "uint256",
         internalType: "uint256"
+      },
+      {
+        name: "description",
+        type: "string",
+        internalType: "string"
+      },
+      {
+        name: "image",
+        type: "string",
+        internalType: "string"
+      },
+      {
+        name: "website",
+        type: "string",
+        internalType: "string"
+      },
+      {
+        name: "twitter",
+        type: "string",
+        internalType: "string"
+      },
+      {
+        name: "telegram",
+        type: "string",
+        internalType: "string"
+      },
+      {
+        name: "discord",
+        type: "string",
+        internalType: "string"
       }
     ],
     outputs: [
@@ -115,48 +145,5 @@ export const TokenFactoryAbi = [
       }
     ],
     stateMutability: "view"
-  },
-  {
-    type: "event",
-    name: "TokenCreated",
-    inputs: [
-      {
-        name: "tokenAddress",
-        type: "address",
-        indexed: true,
-        internalType: "address"
-      },
-      {
-        name: "creator",
-        type: "address",
-        indexed: true,
-        internalType: "address"
-      },
-      {
-        name: "name",
-        type: "string",
-        indexed: false,
-        internalType: "string"
-      },
-      {
-        name: "symbol",
-        type: "string",
-        indexed: false,
-        internalType: "string"
-      },
-      {
-        name: "decimals",
-        type: "uint8",
-        indexed: false,
-        internalType: "uint8"
-      },
-      {
-        name: "initialSupply",
-        type: "uint256",
-        indexed: false,
-        internalType: "uint256"
-      }
-    ],
-    anonymous: false
   }
 ] as const;

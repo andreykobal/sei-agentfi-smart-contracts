@@ -63,7 +63,20 @@ contract BondingCurve is BaseHook {
     uint256 private constant BONDING_CURVE_K = VIRTUAL_USDT_RESERVE * VIRTUAL_TOKEN_RESERVE; // k = 6,438,000,006,000
     
     // Events
-    event TokenCreated(address indexed token, address indexed creator, string name, string symbol);
+    event TokenCreated(
+        address indexed tokenAddress,
+        address indexed creator,
+        string name,
+        string symbol,
+        uint8 decimals,
+        uint256 initialSupply,
+        string description,
+        string image,
+        string website,
+        string twitter,
+        string telegram,
+        string discord
+    );
     event LiquidityAdded(address indexed token, uint256 usdtAmount, uint256 tokenAmount);
     event TokenGraduated(address indexed token, uint256 totalMinted, uint256 totalUsdtRaised);
     
@@ -107,18 +120,41 @@ contract BondingCurve is BaseHook {
     /// @param name The name of the new token
     /// @param symbol The symbol of the new token
     /// @param initialSupply The initial supply of the new token (will be minted to creator)
+    /// @param description A description of the token
+    /// @param image URL to the token's image/logo
+    /// @param website Official website URL
+    /// @param twitter Twitter handle or URL
+    /// @param telegram Telegram group/channel URL
+    /// @param discord Discord server URL
     /// @return tokenAddress The address of the newly created token
     function createToken(
         string memory name,
         string memory symbol,
-        uint256 initialSupply
+        uint256 initialSupply,
+        string memory description,
+        string memory image,
+        string memory website,
+        string memory twitter,
+        string memory telegram,
+        string memory discord
     ) external returns (address tokenAddress) {
         // Create the new token with 18 decimals
-        tokenAddress = tokenFactory.createToken(name, symbol, 18, initialSupply);
+        tokenAddress = tokenFactory.createToken(
+            name, 
+            symbol, 
+            18, 
+            initialSupply,
+            description,
+            image,
+            website,
+            twitter,
+            telegram,
+            discord
+        );
         
         // Pool key will be created when token graduates and pool is created
         // For now, just emit the token creation event
-        emit TokenCreated(tokenAddress, msg.sender, name, symbol);
+        emit TokenCreated(tokenAddress, msg.sender, name, symbol, 18, initialSupply, description, image, website, twitter, telegram, discord);
         
         return tokenAddress;
     }

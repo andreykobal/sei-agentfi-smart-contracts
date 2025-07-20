@@ -11,9 +11,17 @@ import {MockERC20} from "../src/MockERC20.sol";
 contract CreateToken is BaseScript {
     
     // Token parameters - modify these as needed
-    string constant TOKEN_NAME = "Doge Moon";
-    string constant TOKEN_SYMBOL = "DOGEM";
+    string constant TOKEN_NAME = "Rainbow Dash";
+    string constant TOKEN_SYMBOL = "RDASH";
     uint256 constant INITIAL_SUPPLY = 1_000_000e18; // 1 million tokens to creator
+    
+    // Token metadata
+    string constant TOKEN_DESCRIPTION = "The fastest pony in Equestria! Rainbow Dash represents loyalty, speed, and the magic of friendship. 20% cooler than other tokens!";
+    string constant TOKEN_IMAGE = "https://media.avasocial.net/characters/02deb49a-3997-4e52-9e96-4b91e3b2e29c.jpg";
+    string constant TOKEN_WEBSITE = "https://rainbowdash.finance";
+    string constant TOKEN_TWITTER = "https://twitter.com/RainbowDashCoin";
+    string constant TOKEN_TELEGRAM = "https://t.me/RainbowDashToken";
+    string constant TOKEN_DISCORD = "https://discord.gg/rainbowdash";
     
     function run() external {
         console.log("=== Creating Token for Bonding Curve ===");
@@ -24,6 +32,12 @@ contract CreateToken is BaseScript {
         console.log("- Name:", TOKEN_NAME);
         console.log("- Symbol:", TOKEN_SYMBOL);
         console.log("- Initial Supply:", INITIAL_SUPPLY);
+        console.log("- Description:", TOKEN_DESCRIPTION);
+        console.log("- Image:", TOKEN_IMAGE);
+        console.log("- Website:", TOKEN_WEBSITE);
+        console.log("- Twitter:", TOKEN_TWITTER);
+        console.log("- Telegram:", TOKEN_TELEGRAM);
+        console.log("- Discord:", TOKEN_DISCORD);
         console.log("");
 
         vm.startBroadcast();
@@ -35,7 +49,13 @@ contract CreateToken is BaseScript {
         address tokenAddress = bondingCurve.createToken(
             TOKEN_NAME,
             TOKEN_SYMBOL,
-            INITIAL_SUPPLY
+            INITIAL_SUPPLY,
+            TOKEN_DESCRIPTION,
+            TOKEN_IMAGE,
+            TOKEN_WEBSITE,
+            TOKEN_TWITTER,
+            TOKEN_TELEGRAM,
+            TOKEN_DISCORD
         );
 
         vm.stopBroadcast();
