@@ -32,7 +32,7 @@ contract DeployTokens is Script {
         // 1. Deploy TokenFactory
         deployTokenFactory();
 
-        // 2. Create USDT token (6 decimals, like real USDT)
+        // 2. Create USDT token (18 decimals)
         createUSDTToken();
 
         // 3. Create TEST token (18 decimals)
@@ -62,7 +62,7 @@ contract DeployTokens is Script {
         address usdtAddress = tokenFactory.createToken(
             "Tether USD",
             "USDT",
-            6, // USDT typically has 6 decimals
+            18, // USDT using 18 decimals for this implementation
             USDT_SUPPLY
         );
         
@@ -179,7 +179,7 @@ contract DeployTokens is Script {
         console.log("");
         console.log("=== Note ===");
         console.log("All token addresses automatically saved to deployments/{chainId}.json");
-        console.log("USDT uses 6 decimals (like real USDT), TEST uses 18 decimals");
+        console.log("USDT uses 18 decimals, TEST uses 18 decimals");
         console.log("Both tokens have 1 billion initial supply minted to deployer");
         console.log("Token addresses are merged with existing infrastructure deployment");
     }
