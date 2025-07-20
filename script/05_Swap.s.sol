@@ -12,7 +12,7 @@ import {MockERC20} from "../src/MockERC20.sol";
 
 contract SwapScript is BaseScript {
     // Hardcoded second token address - update this as needed
-    address constant OTHER_TOKEN = 0xA80E1507d403B520bA52F7939af2a9D7fCC00356; // Update this address as needed
+    address constant OTHER_TOKEN = 0xc1581652295cdcFd10B24858fA5984c4FAdb0bD0; // Update this address as needed
     
     function run() external {
         uint256 usdtAmount = 5000e18; // 5000 USDT (18 decimals)

@@ -5,6 +5,8 @@ import {console2} from "forge-std/Script.sol";
 import {StdConstants} from "forge-std/StdConstants.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 
 import {BaseScript} from "./base/BaseScript.sol";
 
@@ -33,19 +35,23 @@ contract DeployHookScript is BaseScript {
         console2.log("- BEFORE_SWAP_RETURNS_DELTA_FLAG: true");
         console2.log("");
 
-        // Get TokenFactory and USDT addresses from deployment file
+        // Get TokenFactory, USDT, PositionManager, and Permit2 addresses from deployment file
         string memory chainIdStr = vm.toString(block.chainid);
         string memory deploymentPath = string.concat("deployments/", chainIdStr, ".json");
         string memory json = vm.readFile(deploymentPath);
         address tokenFactory = vm.parseJsonAddress(json, ".tokenFactory");
         address usdtAddress = vm.parseJsonAddress(json, ".usdt");
+        address positionManagerAddress = vm.parseJsonAddress(json, ".positionManager");
+        address permit2Address = vm.parseJsonAddress(json, ".permit2");
         
         console2.log("TokenFactory:", tokenFactory);
         console2.log("USDT Address:", usdtAddress);
+        console2.log("PositionManager:", positionManagerAddress);
+        console2.log("Permit2:", permit2Address);
         console2.log("");
 
         // Mine a salt that will produce a hook address with the correct flags
-        bytes memory constructorArgs = abi.encode(poolManager, tokenFactory, usdtAddress);
+        bytes memory constructorArgs = abi.encode(poolManager, tokenFactory, usdtAddress, positionManagerAddress, permit2Address);
         console2.log("Mining hook address with correct flags...");
         (address hookAddress, bytes32 salt) =
             HookMiner.find(StdConstants.CREATE2_FACTORY, flags, type(BondingCurve).creationCode, constructorArgs);
@@ -56,7 +62,7 @@ contract DeployHookScript is BaseScript {
 
         // Deploy the hook using CREATE2
         vm.startBroadcast();
-        BondingCurve bondingCurve = new BondingCurve{salt: salt}(poolManager, tokenFactory, usdtAddress);
+        BondingCurve bondingCurve = new BondingCurve{salt: salt}(poolManager, tokenFactory, usdtAddress, IPositionManager(positionManagerAddress), IPermit2(permit2Address));
         vm.stopBroadcast();
 
         require(address(bondingCurve) == hookAddress, "DeployHookScript: Hook Address Mismatch");

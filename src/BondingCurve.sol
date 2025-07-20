@@ -2,6 +2,9 @@
 pragma solidity ^0.8.26;
 
 import {BaseHook} from "@uniswap/v4-periphery/src/utils/BaseHook.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -14,6 +17,8 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
+import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 
 import {TokenFactory} from "./TokenFactory.sol";
 import {MockERC20} from "./MockERC20.sol";
@@ -22,6 +27,7 @@ contract BondingCurve is BaseHook {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using SafeCast for uint256;
+    using StateLibrary for IPoolManager;
 
     // NOTE: ---------------------------------------------------------
     // state variables should typically be unique to a pool
@@ -34,17 +40,26 @@ contract BondingCurve is BaseHook {
     // USDT address for pairing
     address public immutable usdt;
     
+    // Position manager for adding liquidity
+    IPositionManager public immutable positionManager;
+    
+    // Permit2 for token approvals
+    IPermit2 public immutable permit2;
+    
     // Track bonding curve data for each token
     mapping(address => uint256) public totalMinted; // Total tokens minted via bonding curve
     mapping(address => uint256) public totalUsdtRaised; // Total USDT raised for each token
     mapping(PoolId => address) public poolToToken; // Map pool to its custom token address
+    mapping(address => PoolKey) public tokenToPoolKey; // Map token to its pool key
     
     // Events
     event TokenAndPoolCreated(address indexed token, address indexed creator, PoolId indexed poolId);
 
-    constructor(IPoolManager _poolManager, address _tokenFactory, address _usdt) BaseHook(_poolManager) {
+    constructor(IPoolManager _poolManager, address _tokenFactory, address _usdt, IPositionManager _positionManager, IPermit2 _permit2) BaseHook(_poolManager) {
         tokenFactory = TokenFactory(_tokenFactory);
         usdt = _usdt;
+        positionManager = _positionManager;
+        permit2 = _permit2;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
@@ -119,8 +134,9 @@ contract BondingCurve is BaseHook {
         
         poolId = poolKey.toId();
         
-        // Store the mapping for this pool
+        // Store the mappings for this pool
         poolToToken[poolId] = tokenAddress;
+        tokenToPoolKey[tokenAddress] = poolKey;
         
         emit TokenAndPoolCreated(tokenAddress, msg.sender, poolId);
         
@@ -181,11 +197,85 @@ contract BondingCurve is BaseHook {
         // Mint tokens to user
         MockERC20(tokenAddress).mint(msg.sender, tokensReceived);
         
+        // Add liquidity to the pool with the USDT and some tokens
+        // This gradually builds liquidity instead of just accumulating USDT
+        _addLiquidityToPool(tokenAddress, usdtAmount);
+        
         // Update tracking
         totalMinted[tokenAddress] += tokensReceived;
         totalUsdtRaised[tokenAddress] += usdtAmount;
         
         return tokensReceived;
+    }
+    
+    /// @notice Internal function to add liquidity to the pool using PositionManager
+    /// @param tokenAddress The token address
+    /// @param usdtAmount The amount of USDT to add as liquidity
+    function _addLiquidityToPool(address tokenAddress, uint256 usdtAmount) internal {
+        PoolKey memory key = tokenToPoolKey[tokenAddress];
+        
+        // Use minimal tokens for liquidity (essentially just USDT)
+        uint256 tokensForLiquidity = 1; // Just 1 wei of tokens
+        
+        // Mint tokens for liquidity to this contract
+        MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
+        
+        // Get current pool state
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+        int24 currentTick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
+        
+        // Set tick range (wide range for simplicity)
+        int24 tickSpacing = key.tickSpacing;
+        int24 tickLower = ((currentTick - 100 * tickSpacing) / tickSpacing) * tickSpacing;
+        int24 tickUpper = ((currentTick + 100 * tickSpacing) / tickSpacing) * tickSpacing;
+        
+        // Determine amounts based on currency ordering
+        uint256 amount0Max;
+        uint256 amount1Max;
+        
+        if (Currency.unwrap(key.currency0) == tokenAddress) {
+            // token is currency0, USDT is currency1
+            amount0Max = tokensForLiquidity;
+            amount1Max = usdtAmount;
+        } else {
+            // USDT is currency0, token is currency1
+            amount0Max = usdtAmount;
+            amount1Max = tokensForLiquidity;
+        }
+        
+        // Calculate liquidity amount
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(tickLower),
+            TickMath.getSqrtPriceAtTick(tickUpper),
+            amount0Max,
+            amount1Max
+        );
+        
+        // Approve tokens to Permit2 first (standard ERC20 approval)
+        MockERC20(usdt).approve(address(permit2), usdtAmount);
+        MockERC20(tokenAddress).approve(address(permit2), tokensForLiquidity);
+        
+        // Set up Permit2 allowances for PositionManager
+        permit2.approve(usdt, address(positionManager), uint160(usdtAmount), uint48(block.timestamp + 3600));
+        permit2.approve(tokenAddress, address(positionManager), uint160(tokensForLiquidity), uint48(block.timestamp + 3600));
+        
+        // Prepare multicall parameters
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        
+        bytes[] memory mintParams = new bytes[](2);
+        mintParams[0] = abi.encode(key, tickLower, tickUpper, liquidity, amount0Max, amount1Max, address(this), new bytes(0));
+        mintParams[1] = abi.encode(key.currency0, key.currency1);
+        
+        bytes[] memory params = new bytes[](1);
+        params[0] = abi.encodeWithSelector(
+            positionManager.modifyLiquidities.selector, 
+            abi.encode(actions, mintParams), 
+            block.timestamp + 60
+        );
+        
+        // Add liquidity through position manager
+        positionManager.multicall(params);
     }
 
     // -----------------------------------------------
