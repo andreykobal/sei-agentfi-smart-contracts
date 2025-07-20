@@ -55,11 +55,12 @@ contract BondingCurve is BaseHook {
     
     // Constants
     uint256 public constant LIQUIDITY_THRESHOLD = 800_000_000 * 1e18; // 800M tokens
-    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens
+    uint256 public constant LIQUIDITY_TOKEN_AMOUNT = 200_000_000 * 1e18; // 200M tokens (legacy - now calculated dynamically)
     
     // Events
-    event TokenAndPoolCreated(address indexed token, address indexed creator, PoolId indexed poolId);
+    event TokenCreated(address indexed token, address indexed creator, string name, string symbol);
     event LiquidityAdded(address indexed token, uint256 usdtAmount, uint256 tokenAmount);
+    event TokenGraduated(address indexed token, uint256 totalMinted, uint256 totalUsdtRaised);
 
     constructor(IPoolManager _poolManager, address _tokenFactory, address _usdt, IPositionManager _positionManager, IPermit2 _permit2) BaseHook(_poolManager) {
         tokenFactory = TokenFactory(_tokenFactory);
@@ -87,66 +88,24 @@ contract BondingCurve is BaseHook {
         });
     }
 
-    /// @notice Creates a new ERC20 token and pairs it with USDT in a new pool with 0 liquidity
+    /// @notice Creates a new ERC20 token for bonding curve trading (pool created later at graduation)
     /// @param name The name of the new token
     /// @param symbol The symbol of the new token
     /// @param initialSupply The initial supply of the new token (will be minted to creator)
     /// @return tokenAddress The address of the newly created token
-    /// @return poolId The ID of the newly created pool
-    function createTokenAndPool(
+    function createToken(
         string memory name,
         string memory symbol,
         uint256 initialSupply
-    ) external returns (address tokenAddress, PoolId poolId) {
+    ) external returns (address tokenAddress) {
         // Create the new token with 18 decimals
         tokenAddress = tokenFactory.createToken(name, symbol, 18, initialSupply);
         
-        // Create currencies for pool creation
-        Currency currency0;
-        Currency currency1;
+        // Pool key will be created when token graduates and pool is created
+        // For now, just emit the token creation event
+        emit TokenCreated(tokenAddress, msg.sender, name, symbol);
         
-        // Determine currency ordering (lower address first)
-        if (tokenAddress < usdt) {
-            currency0 = Currency.wrap(tokenAddress);
-            currency1 = Currency.wrap(usdt);
-        } else {
-            currency0 = Currency.wrap(usdt);
-            currency1 = Currency.wrap(tokenAddress);
-        }
-        
-        // Create the pool key
-        PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 3000, // 0.3% fee
-            tickSpacing: 60, // Standard tick spacing for 0.3% fee
-            hooks: this // Use this hook contract
-        });
-        
-        // Initialize the pool with 0 liquidity (price = 1:80000 - 80,000 tokens for 1 USDT)
-        uint160 sqrtPriceX96;
-        
-        if (tokenAddress < usdt) {
-            // token is currency0, USDT is currency1
-            // price = currency1/currency0 = USDT/token = 1/80,000 = 0.0000125
-            sqrtPriceX96 = 280174524799725590; // sqrt(1/80000) * 2^96
-        } else {
-            // USDT is currency0, token is currency1  
-            // price = currency1/currency0 = token/USDT = 80,000
-            sqrtPriceX96 = 22415874239952134371853123584; // sqrt(80000) * 2^96
-        }
-        
-        poolManager.initialize(poolKey, sqrtPriceX96);
-        
-        poolId = poolKey.toId();
-        
-        // Store the mappings for this pool
-        poolToToken[poolId] = tokenAddress;
-        tokenToPoolKey[tokenAddress] = poolKey;
-        
-        emit TokenAndPoolCreated(tokenAddress, msg.sender, poolId);
-        
-        return (tokenAddress, poolId);
+        return tokenAddress;
     }
 
     /// @notice Calculate how many tokens to mint for a given USDT amount using PUMP.FUN's bonding curve
@@ -186,12 +145,44 @@ contract BondingCurve is BaseHook {
         return tokensToMint;
     }
     
+    /// @notice Check if a token has graduated (liquidity added to pool)
+    /// @param tokenAddress The token address to check
+    /// @return graduated True if token has graduated and liquidity is available for normal swaps
+    function isTokenGraduated(address tokenAddress) public view returns (bool graduated) {
+        return liquidityAdded[tokenAddress];
+    }
+    
+    /// @notice Get graduation progress for a token
+    /// @param tokenAddress The token address to check
+    /// @return isGraduated True if token has graduated
+    /// @return tokensMinted Current tokens minted via bonding curve
+    /// @return tokensUntilGraduation Tokens remaining until graduation (0 if graduated)
+    /// @return progressPercent Progress toward graduation (0-100, or 100+ if graduated)
+    function getGraduationStatus(address tokenAddress) public view returns (
+        bool isGraduated,
+        uint256 tokensMinted,
+        uint256 tokensUntilGraduation,
+        uint256 progressPercent
+    ) {
+        isGraduated = liquidityAdded[tokenAddress];
+        tokensMinted = totalMinted[tokenAddress];
+        
+        if (isGraduated || tokensMinted >= LIQUIDITY_THRESHOLD) {
+            tokensUntilGraduation = 0;
+            progressPercent = 100;
+        } else {
+            tokensUntilGraduation = LIQUIDITY_THRESHOLD - tokensMinted;
+            progressPercent = (tokensMinted * 100) / LIQUIDITY_THRESHOLD;
+        }
+    }
+    
     /// @notice Buy tokens directly with USDT using the bonding curve
     /// @param tokenAddress The address of the token to buy
     /// @param usdtAmount The amount of USDT to spend
     /// @return tokensReceived The number of tokens received
     function buyTokens(address tokenAddress, uint256 usdtAmount) external returns (uint256 tokensReceived) {
         require(usdtAmount > 0, "Amount must be greater than 0");
+        require(!isTokenGraduated(tokenAddress), "Token has graduated - use normal swaps instead");
         
         // Calculate tokens to mint
         tokensReceived = calculateTokensToMint(tokenAddress, usdtAmount);
@@ -211,28 +202,75 @@ contract BondingCurve is BaseHook {
         if (totalMinted[tokenAddress] >= LIQUIDITY_THRESHOLD && !liquidityAdded[tokenAddress]) {
             _addLiquidityToPool(tokenAddress);
             liquidityAdded[tokenAddress] = true;
+            
+            // Emit graduation event
+            emit TokenGraduated(tokenAddress, totalMinted[tokenAddress], totalUsdtRaised[tokenAddress]);
         }
         
         return tokensReceived;
     }
     
-    /// @notice Internal function to add liquidity to the pool using PositionManager
+    /// @notice Internal function to create pool and add liquidity using PositionManager
     /// @param tokenAddress The token address
     function _addLiquidityToPool(address tokenAddress) internal {
-        PoolKey memory key = tokenToPoolKey[tokenAddress];
+        // Create the pool key for graduation (not stored during token creation)
+        Currency currency0;
+        Currency currency1;
+        
+        // Determine currency ordering (lower address first)
+        if (tokenAddress < usdt) {
+            currency0 = Currency.wrap(tokenAddress);
+            currency1 = Currency.wrap(usdt);
+        } else {
+            currency0 = Currency.wrap(usdt);
+            currency1 = Currency.wrap(tokenAddress);
+        }
+        
+        PoolKey memory key = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: 3000, // 0.3% fee
+            tickSpacing: 60, // Standard tick spacing for 0.3% fee
+            hooks: this // Use this hook contract
+        });
         
         // Use all accumulated USDT for this token
         uint256 usdtAmount = totalUsdtRaised[tokenAddress];
         require(usdtAmount > 0, "No USDT to add as liquidity");
         
-        // Use 200M tokens for liquidity
-        uint256 tokensForLiquidity = LIQUIDITY_TOKEN_AMOUNT;
+        // Calculate final bonding curve price to ensure smooth transition
+        uint256 tokensPerUSDT = calculateTokensToMint(tokenAddress, 1e18);
+        
+        // Calculate tokens needed to maintain bonding curve price in AMM
+        // Note: tokensPerUSDT is in wei, usdtAmount is in wei, so divide by 1e18 to avoid double-counting decimals
+        uint256 tokensForLiquidity = (tokensPerUSDT * usdtAmount) / 1e18;
         
         // Mint tokens for liquidity to this contract
         MockERC20(tokenAddress).mint(address(this), tokensForLiquidity);
         
-        // Get current pool state
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
+        // Calculate the correct sqrt price for the final bonding curve price
+        uint160 sqrtPriceX96;
+        
+        if (Currency.unwrap(key.currency0) == tokenAddress) {
+            // token is currency0, USDT is currency1
+            // price = currency1/currency0 = USDT/token = 1/tokensPerUSDT
+            uint256 price = (1e36) / tokensPerUSDT; // price in wei terms
+            sqrtPriceX96 = uint160(_sqrt(price) * (2**96) / 1e18);
+        } else {
+            // USDT is currency0, token is currency1  
+            // price = currency1/currency0 = token/USDT = tokensPerUSDT
+            sqrtPriceX96 = uint160(_sqrt(tokensPerUSDT * 1e18) * (2**96) / 1e18);
+        }
+        
+        // Create the pool with the correct sqrt price!
+        poolManager.initialize(key, sqrtPriceX96);
+        
+        // Store the pool mappings now that pool is created
+        PoolId poolId = key.toId();
+        poolToToken[poolId] = tokenAddress;
+        tokenToPoolKey[tokenAddress] = key;
+        
+        // Now get the tick for liquidity calculations
         int24 currentTick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
         
         // Set tick range (wide range for simplicity)
@@ -299,70 +337,22 @@ contract BondingCurve is BaseHook {
         
         _addLiquidityToPool(tokenAddress);
         liquidityAdded[tokenAddress] = true;
+        
+        // Emit graduation event
+        emit TokenGraduated(tokenAddress, totalMinted[tokenAddress], totalUsdtRaised[tokenAddress]);
     }
 
     // -----------------------------------------------
     // NOTE: see IHooks.sol for function documentation
     // -----------------------------------------------
 
-    function _beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata)
+    function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        PoolId poolId = key.toId();
-        address tokenAddress = poolToToken[poolId];
-        
-        // If this isn't a bonding curve pool, use normal swap logic
-        if (tokenAddress == address(0)) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-        
-        // Determine which currency is USDT and which is the token
-        bool currency0IsUsdt = Currency.unwrap(key.currency0) == usdt;
-        bool currency1IsUsdt = Currency.unwrap(key.currency1) == usdt;
-        bool currency0IsToken = Currency.unwrap(key.currency0) == tokenAddress;
-        bool currency1IsToken = Currency.unwrap(key.currency1) == tokenAddress;
-        
-        // Validate this is a USDT/token pair
-        if (!((currency0IsUsdt && currency1IsToken) || (currency0IsToken && currency1IsUsdt))) {
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-        
-        // Check if user is buying tokens with USDT (exactInput with USDT)
-        bool buyingTokensWithUsdt = false;
-        uint256 usdtAmountIn = 0;
-        
-        if (params.amountSpecified > 0) { // exactInput
-            if (currency0IsUsdt && params.zeroForOne) {
-                // Swapping USDT (currency0) for tokens (currency1)
-                buyingTokensWithUsdt = true;
-                usdtAmountIn = uint256(params.amountSpecified);
-            } else if (currency1IsUsdt && !params.zeroForOne) {
-                // Swapping USDT (currency1) for tokens (currency0)  
-                buyingTokensWithUsdt = true;
-                usdtAmountIn = uint256(params.amountSpecified);
-            }
-        }
-        
-        if (buyingTokensWithUsdt && usdtAmountIn > 0) {
-            // Calculate tokens to mint using bonding curve
-            uint256 tokensToMint = calculateTokensToMint(tokenAddress, usdtAmountIn);
-            
-            // Mint tokens directly to the sender
-            MockERC20(tokenAddress).mint(sender, tokensToMint);
-            
-            // Update tracking
-            totalMinted[tokenAddress] += tokensToMint;
-            totalUsdtRaised[tokenAddress] += usdtAmountIn;
-            
-            // For now, let the swap proceed normally but the tokens are already minted
-            // The user will get both: minted tokens + whatever the normal swap gives
-            // This creates an arbitrage opportunity that will quickly bring pool to equilibrium
-            return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
-        
-        // For any other swap type, use normal logic
+        // Simple passthrough - let all swaps proceed normally
+        // Bonding curve logic is handled by the separate buyTokens() function
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
@@ -388,5 +378,19 @@ contract BondingCurve is BaseHook {
         returns (bytes4)
     {
         return this.beforeRemoveLiquidity.selector;
+    }
+    
+    /// @notice Calculate square root using Babylonian method
+    /// @param x The number to calculate square root for
+    /// @return The square root of x
+    function _sqrt(uint256 x) internal pure returns (uint256) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        uint256 y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+        return y;
     }
 }

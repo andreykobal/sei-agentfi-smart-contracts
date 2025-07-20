@@ -12,7 +12,7 @@ import {MockERC20} from "../src/MockERC20.sol";
 
 contract SwapScript is BaseScript {
     // Hardcoded second token address - update this as needed
-    address constant OTHER_TOKEN = 0xb8677Cb640ab9bCcb48D9340Ab6010302169bAdA; // Update this address as needed
+    address constant OTHER_TOKEN = 0x38E35E18852911EBae1FE14E78c8dabFf328F7Ed; // Update this address as needed
     
     function run() external {
         uint256 usdtAmount = 5000e18; // 5000 USDT (18 decimals)
@@ -40,6 +40,22 @@ contract SwapScript is BaseScript {
         // Check current price before purchase
         uint256 tokensExpected = bondingCurve.calculateTokensToMint(OTHER_TOKEN, usdtAmount);
         console.log("Tokens Expected:", tokensExpected);
+        
+        // Show current bonding curve price
+        uint256 currentPrice = bondingCurve.calculateTokensToMint(OTHER_TOKEN, 1e18);
+        console.log("");
+        console.log("=== Current Bonding Curve Price ===");
+        console.log("Price: 1 USDT =", currentPrice / 1e18, "tokens");
+        console.log("Total minted so far:", bondingCurve.totalMinted(OTHER_TOKEN) / 1e18, "tokens");
+        console.log("Total USDT raised so far:", bondingCurve.totalUsdtRaised(OTHER_TOKEN) / 1e18, "USDT");
+        
+        // Check if token is already graduated
+        bool preGraduated = bondingCurve.isTokenGraduated(OTHER_TOKEN);
+        if (preGraduated) {
+            console.log("WARNING: Token already graduated - cannot use buyTokens!");
+            console.log("Use normal Uniswap swaps instead.");
+            return;
+        }
         console.log("");
 
         vm.startBroadcast();
@@ -64,6 +80,10 @@ contract SwapScript is BaseScript {
         uint256 totalMinted = bondingCurve.totalMinted(OTHER_TOKEN);
         uint256 totalRaised = bondingCurve.totalUsdtRaised(OTHER_TOKEN);
         
+        // Check graduation status
+        (bool isGraduated, uint256 tokensMinted, uint256 tokensUntilGraduation, uint256 progressPercent) = 
+            bondingCurve.getGraduationStatus(OTHER_TOKEN);
+        
         // Log results
         console.log("=== Balances After Purchase ===");
         console.log("USDT Balance:", usdtBalanceAfter);
@@ -87,12 +107,38 @@ contract SwapScript is BaseScript {
         console.log("=== Formatted Transaction Summary ===");
         console.log("USDT Spent:", usdtSpent / 1e18, "USDT");
         console.log("Tokens Gained:", tokensGained / 1e18, "tokens");
-        console.log("Rate:", (tokensGained / 1e18) / (usdtSpent / 1e18), "tokens per USDT");
+            if (usdtSpent > 0) {
+            console.log("Rate:", (tokensGained / 1e18) / (usdtSpent / 1e18), "tokens per USDT");
+        } else {
+            console.log("Rate: Division by zero - tiny USDT amount");
+        }
         console.log("");
         
         console.log("=== Bonding Curve Stats ===");
         console.log("Total Tokens Minted:", totalMinted);
         console.log("Total USDT Raised:", totalRaised);
+        console.log("");
+        
+        // Show new bonding curve price after purchase
+        uint256 newPrice = bondingCurve.calculateTokensToMint(OTHER_TOKEN, 1e18);
+        console.log("=== Price Impact Analysis ===");
+        console.log("Price before: 1 USDT =", currentPrice / 1e18, "tokens");
+        console.log("Price after: 1 USDT =", newPrice / 1e18, "tokens");
+        if (newPrice < currentPrice) {
+            uint256 priceIncrease = ((currentPrice - newPrice) * 100) / currentPrice;
+            console.log("Price increased by:", priceIncrease, "% (fewer tokens per USDT)");
+        }
+        console.log("");
+        
+        console.log("=== Graduation Status ===");
+        if (isGraduated) {
+            console.log("Status: GRADUATED! Use normal Uniswap swaps");
+            console.log("Liquidity Pool: Active");
+        } else {
+            console.log("Status: Bonding Curve Phase");
+            console.log("Progress:", progressPercent, "% to graduation");
+            console.log("Tokens until graduation:", tokensUntilGraduation / 1e18, "tokens");
+        }
         console.log("");
         
         // Show next purchase price
