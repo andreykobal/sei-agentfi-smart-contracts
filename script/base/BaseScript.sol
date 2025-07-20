@@ -58,8 +58,8 @@ contract BaseScript is Script {
 
         (currency0, currency1) = getCurrencies();
 
-        vm.label(address(token0), "Token0 (TKA)");
-        vm.label(address(token1), "Token1 (TKB)");
+        vm.label(address(token0), "Token0 (USDT)");
+        vm.label(address(token1), "Token1 (TEST)");
 
         vm.label(address(deployerAddress), "Deployer");
         vm.label(address(permit2), "Permit2");

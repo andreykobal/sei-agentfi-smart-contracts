@@ -6,7 +6,6 @@ import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {IUniswapV4Router04} from "hookmate/interfaces/router/IUniswapV4Router04.sol";
-import {MockERC20} from "../src/MockERC20.sol";
 
 // Import deployment artifacts
 import {Permit2Deployer} from "hookmate/artifacts/Permit2.sol";
@@ -23,8 +22,6 @@ contract DeployUniswapV4Infrastructure is Script {
     IPoolManager public poolManager;
     IPositionManager public positionManager;
     IUniswapV4Router04 public v4Router;
-    MockERC20 public token0;
-    MockERC20 public token1;
 
     // Deployment parameters
     address public owner;
@@ -54,9 +51,6 @@ contract DeployUniswapV4Infrastructure is Script {
 
         // 4. Deploy V4Router (Router for swapping and liquidity operations)
         deployV4Router();
-
-        // 5. Deploy Test Tokens (2 x 18 decimal tokens with 1B supply each)
-        deployTestTokens();
 
         vm.stopBroadcast();
 
@@ -139,33 +133,7 @@ contract DeployUniswapV4Infrastructure is Script {
         console.log("");
     }
 
-    function deployTestTokens() internal {
-        console.log("5. Deploying Test Tokens...");
-        
-        // Deploy Token0 - 1 billion supply with 18 decimals
-        token0 = new MockERC20(
-            "Test Token A",
-            "TKA", 
-            18,
-            1_000_000_000 * 1e18, // 1 billion tokens
-            owner
-        );
-        
-        // Deploy Token1 - 1 billion supply with 18 decimals  
-        token1 = new MockERC20(
-            "Test Token B",
-            "TKB",
-            18, 
-            1_000_000_000 * 1e18, // 1 billion tokens
-            owner
-        );
-        
-        console.log("   Token0 (TKA) deployed at:", address(token0));
-        console.log("   Token1 (TKB) deployed at:", address(token1));
-        console.log("   Initial supply: 1,000,000,000 tokens each");
-        console.log("   Owner:", owner);
-        console.log("");
-    }
+
 
     function saveDeploymentToJson() internal {
         // Create deployment data structure
@@ -175,9 +143,7 @@ contract DeployUniswapV4Infrastructure is Script {
         vm.serializeAddress(json, "permit2", address(permit2));
         vm.serializeAddress(json, "poolManager", address(poolManager));
         vm.serializeAddress(json, "positionManager", address(positionManager));
-        vm.serializeAddress(json, "v4Router", address(v4Router));
-        vm.serializeAddress(json, "token0", address(token0));
-        string memory finalJson = vm.serializeAddress(json, "token1", address(token1));
+        string memory finalJson = vm.serializeAddress(json, "v4Router", address(v4Router));
         
         // Create deployments directory if it doesn't exist
         string memory chainIdStr = vm.toString(block.chainid);
@@ -201,15 +167,13 @@ contract DeployUniswapV4Infrastructure is Script {
         console.log("- PositionManager: ", address(positionManager));
         console.log("- V4Router:        ", address(v4Router));
         console.log("");
-        console.log("Test Tokens:");
-        console.log("- Token0 (TKA):    ", address(token0));
-        console.log("- Token1 (TKB):    ", address(token1));
-        console.log("");
         console.log("=== Next Steps ===");
-        console.log("1. Deploy any hooks you need");
-        console.log("2. Initialize pools using the PoolManager");
-        console.log("3. Add liquidity using the PositionManager");
-        console.log("4. Execute swaps using the V4Router");
+        console.log("1. Deploy TokenFactory if needed");
+        console.log("2. Deploy tokens using the TokenFactory");
+        console.log("3. Deploy any hooks you need");
+        console.log("4. Initialize pools using the PoolManager");
+        console.log("5. Add liquidity using the PositionManager");
+        console.log("6. Execute swaps using the V4Router");
         console.log("");
         console.log("=== Note ===");
         console.log("Used random salts for CREATE2 deployments to avoid collisions");
@@ -222,17 +186,13 @@ contract DeployUniswapV4Infrastructure is Script {
         address _permit2,
         address _poolManager,
         address _positionManager,
-        address _v4Router,
-        address _token0,
-        address _token1
+        address _v4Router
     ) {
         return (
             address(permit2),
             address(poolManager),
             address(positionManager),
-            address(v4Router),
-            address(token0),
-            address(token1)
+            address(v4Router)
         );
     }
 } 
