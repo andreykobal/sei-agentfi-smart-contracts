@@ -13,7 +13,6 @@ contract CreateToken is BaseScript {
     // Token parameters - modify these as needed
     string constant TOKEN_NAME = "Rainbow Dash";
     string constant TOKEN_SYMBOL = "RDASH";
-    uint256 constant INITIAL_SUPPLY = 1_000_000e18; // 1 million tokens to creator
     
     // Token metadata
     string constant TOKEN_DESCRIPTION = "The fastest pony in Equestria! Rainbow Dash represents loyalty, speed, and the magic of friendship. 20% cooler than other tokens!";
@@ -31,7 +30,7 @@ contract CreateToken is BaseScript {
         console.log("Token Details:");
         console.log("- Name:", TOKEN_NAME);
         console.log("- Symbol:", TOKEN_SYMBOL);
-        console.log("- Initial Supply:", INITIAL_SUPPLY);
+        console.log("- Initial Supply: 0 (tokens minted via bonding curve)");
         console.log("- Description:", TOKEN_DESCRIPTION);
         console.log("- Image:", TOKEN_IMAGE);
         console.log("- Website:", TOKEN_WEBSITE);
@@ -49,7 +48,6 @@ contract CreateToken is BaseScript {
         address tokenAddress = bondingCurve.createToken(
             TOKEN_NAME,
             TOKEN_SYMBOL,
-            INITIAL_SUPPLY,
             TOKEN_DESCRIPTION,
             TOKEN_IMAGE,
             TOKEN_WEBSITE,
@@ -81,13 +79,13 @@ contract CreateToken is BaseScript {
         console.log("- Paired with USDT:", address(usdt));
         console.log("- Pool will be created at graduation with correct price");
         console.log("- No pool exists yet (tokens minted via bonding curve)");
-        console.log("- Graduation threshold: 200M tokens");
+        console.log("- Graduation threshold: 20,000 USDT raised");
         console.log("");
         console.log("=== Next Steps ===");
         console.log("1. Token address automatically saved to deployments JSON");
         console.log("2. Run 05_Swap.s.sol to buy tokens using bonding curve");
         console.log("3. Token price will increase with each purchase!");
-        console.log("4. At 200M tokens, pool will be created automatically!");
+        console.log("4. At 20,000 USDT raised, pool will be created automatically!");
         console.log("");
         console.log("=== Bonding Curve Stats ===");
         console.log("Total Minted (via curve):", bondingCurve.totalMinted(tokenAddress));

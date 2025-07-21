@@ -80,6 +80,24 @@ contract BondingCurve is BaseHook {
     event LiquidityAdded(address indexed token, uint256 usdtAmount, uint256 tokenAmount);
     event TokenGraduated(address indexed token, uint256 totalMinted, uint256 totalUsdtRaised);
     
+    event TokenPurchase(
+        address indexed wallet,
+        address indexed tokenAddress,
+        uint256 amountIn,       // USDT amount spent (wei)
+        uint256 amountOut,      // Tokens received (wei)
+        uint256 priceBefore,    // Token price before purchase (USDT per token in wei)
+        uint256 priceAfter      // Token price after purchase (USDT per token in wei)
+    );
+    
+    event TokenSale(
+        address indexed wallet,
+        address indexed tokenAddress,
+        uint256 amountIn,       // Tokens sold (wei)
+        uint256 amountOut,      // USDT received (wei)
+        uint256 priceBefore,    // Token price before sale (USDT per token in wei)
+        uint256 priceAfter      // Token price after sale (USDT per token in wei)
+    );
+    
     /// @notice Get current virtual reserves state for a token's bonding curve
     /// @param tokenAddress The token address
     /// @return virtualUsdtNatural Current virtual USDT reserve in natural units
@@ -119,7 +137,6 @@ contract BondingCurve is BaseHook {
     /// @notice Creates a new ERC20 token for bonding curve trading (pool created later at graduation)
     /// @param name The name of the new token
     /// @param symbol The symbol of the new token
-    /// @param initialSupply The initial supply of the new token (will be minted to creator)
     /// @param description A description of the token
     /// @param image URL to the token's image/logo
     /// @param website Official website URL
@@ -130,7 +147,6 @@ contract BondingCurve is BaseHook {
     function createToken(
         string memory name,
         string memory symbol,
-        uint256 initialSupply,
         string memory description,
         string memory image,
         string memory website,
@@ -138,12 +154,12 @@ contract BondingCurve is BaseHook {
         string memory telegram,
         string memory discord
     ) external returns (address tokenAddress) {
-        // Create the new token with 18 decimals
+        // Create the new token with 18 decimals and 0 initial supply
         tokenAddress = tokenFactory.createToken(
             name, 
             symbol, 
             18, 
-            initialSupply,
+            0, // Always 0 initial supply
             description,
             image,
             website,
@@ -152,9 +168,15 @@ contract BondingCurve is BaseHook {
             discord
         );
         
+        // Get the initial bonding curve price
+        uint256 initialPrice = getCurrentBondingCurvePrice(tokenAddress);
+        
         // Pool key will be created when token graduates and pool is created
-        // For now, just emit the token creation event
-        emit TokenCreated(tokenAddress, msg.sender, name, symbol, 18, initialSupply, description, image, website, twitter, telegram, discord);
+        // Emit the token creation event
+        emit TokenCreated(tokenAddress, msg.sender, name, symbol, 18, 0, description, image, website, twitter, telegram, discord);
+        
+        // Emit token purchase event with 0 amounts but meaningful price
+        emit TokenPurchase(msg.sender, tokenAddress, 0, 0, initialPrice, initialPrice);
         
         return tokenAddress;
     }
@@ -254,6 +276,9 @@ contract BondingCurve is BaseHook {
         require(usdtAmount > 0, "Amount must be greater than 0");
         require(!isTokenGraduated(tokenAddress), "Token has graduated - use normal swaps instead");
         
+        // Capture price before the purchase
+        uint256 priceBefore = getCurrentBondingCurvePrice(tokenAddress);
+        
         uint256 currentUsdtRaised = totalUsdtRaised[tokenAddress];
         uint256 actualUsdtToSpend = usdtAmount;
         uint256 refundAmount = 0;
@@ -285,6 +310,9 @@ contract BondingCurve is BaseHook {
         totalMinted[tokenAddress] += tokensReceived;
         totalUsdtRaised[tokenAddress] += actualUsdtToSpend;
         
+        // Capture price after the purchase
+        uint256 priceAfter = getCurrentBondingCurvePrice(tokenAddress);
+        
         // Check if we should add liquidity (20K USDT raised and not already added)
         if (totalUsdtRaised[tokenAddress] >= USDT_GRADUATION_THRESHOLD && !liquidityAdded[tokenAddress]) {
             _addLiquidityToPool(tokenAddress);
@@ -294,6 +322,9 @@ contract BondingCurve is BaseHook {
             emit TokenGraduated(tokenAddress, totalMinted[tokenAddress], totalUsdtRaised[tokenAddress]);
         }
         
+        // Emit purchase event
+        emit TokenPurchase(msg.sender, tokenAddress, actualUsdtToSpend, tokensReceived, priceBefore, priceAfter);
+
         return tokensReceived;
     }
     
@@ -339,6 +370,9 @@ contract BondingCurve is BaseHook {
         // Can't sell more than what was minted via bonding curve
         require(tokenAmount <= totalMinted[tokenAddress], "Cannot sell more than total minted");
         
+        // Capture price before the sale
+        uint256 priceBefore = getCurrentBondingCurvePrice(tokenAddress);
+        
         // Calculate USDT to return using inverse bonding curve
         usdtReceived = calculateUsdtToReturn(tokenAddress, tokenAmount);
         require(usdtReceived > 0, "No USDT to return");
@@ -357,6 +391,12 @@ contract BondingCurve is BaseHook {
         totalMinted[tokenAddress] -= tokenAmount;
         totalUsdtRaised[tokenAddress] -= usdtReceived;
         
+        // Capture price after the sale
+        uint256 priceAfter = getCurrentBondingCurvePrice(tokenAddress);
+        
+        // Emit sale event
+        emit TokenSale(msg.sender, tokenAddress, tokenAmount, usdtReceived, priceBefore, priceAfter);
+
         return usdtReceived;
     }
     
