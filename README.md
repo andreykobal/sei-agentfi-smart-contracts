@@ -1,85 +1,208 @@
-# Uniswap v4 Hook Template
+# Sei AgentFi - Bonding Curve Trading Platform
 
-**A template for writing Uniswap v4 Hooks 🦄**
+A decentralized token trading platform built on Uniswap V4 that implements a bonding curve mechanism inspired by PUMP.FUN. Tokens start in a bonding curve phase, then graduate to normal Uniswap trading at 20,000 USDT raised.
 
-### Get Started
+## Token Lifecycle
 
-This template provides a starting point for writing Uniswap v4 Hooks, including a simple example and preconfigured test environment. Start by creating a new repository using the "Use this template" button at the top right of this page. Alternatively you can also click this link:
+### Phase 1: Bonding Curve Trading
 
-[![Use this Template](https://img.shields.io/badge/Use%20this%20Template-101010?style=for-the-badge&logo=github)](https://github.com/uniswapfoundation/v4-template/generate)
+- **Token Creation**: Create tokens with metadata (name, symbol, image, social links)
+- **Initial Supply**: 0 tokens - all minted through bonding curve purchases
+- **Trading**: Direct buy/sell with bonding curve contract using PUMP.FUN formula
+- **Price Mechanism**: Each purchase increases price, each sale decreases price
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+### Phase 2: Graduation (20,000 USDT raised)
 
-<details>
-<summary>Updating to v4-template:latest</summary>
+- **Pool Creation**: Automatically creates Uniswap V4 liquidity pool
+- **Liquidity Addition**: Remaining tokens (1B total - minted) + all USDT added as liquidity
+- **Price Continuity**: Pool starts at final bonding curve price
 
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers:
+### Phase 3: Normal Trading
 
-```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
+- **Standard AMM**: Normal Uniswap trading with fixed 1B token supply
+- **No More Minting**: Bonding curve disabled, price set by market forces
+
+## Bonding Curve Formula
+
+The bonding curve uses PUMP.FUN's mathematics with virtual reserves:
+
+### Virtual Reserve Model
+
+The bonding curve operates using virtual reserves that create a constant product:
+
+```
+Virtual USDT Reserve = 6,000 + x
+Virtual Token Reserve = k ÷ (6,000 + x)
 ```
 
-</details>
+Where:
+
+- `x` = Total USDT raised through bonding curve trading
+- `k` = 6,438,000,006,000 (constant product)
+- `6,000` = Virtual initial USDT reserve
+
+### Token Supply Function
+
+The total tokens issued as a function of USDT contributed:
+
+$$
+S(x) = T - \frac{k}{6000 + x}
+$$
+
+Where:
+
+- `T` = Virtual total token supply (≈ 1.073B tokens)
+- `k` = 6,438,000,006,000 (scaling constant)
+- `x` = USDT contributed to the bonding curve
+
+### Instantaneous Token Price
+
+The current price per token (in USDT) at any point in the curve:
+
+$$
+p(x) = \frac{(6000 + x)^2}{k}
+$$
+
+**Properties:**
+
+- Price starts low when `x` is small (early purchases cheaper)
+- Price increases quadratically with total USDT raised
+- Deterministic pricing follows mathematical formula
+- No front-running during bonding curve phase
+
+### Example Pricing
+
+With our constants:
+
+- **Initial Price** (x=0): `(6000)² ÷ 6,438,000,006,000 ≈ 0.0000056 USDT per token`
+- **At 1,000 USDT raised**: `(7000)² ÷ 6,438,000,006,000 ≈ 0.0076 USDT per token`
+- **At 10,000 USDT raised**: `(16000)² ÷ 6,438,000,006,000 ≈ 0.0398 USDT per token`
+- **At graduation (20,000 USDT)**: `(26000)² ÷ 6,438,000,006,000 ≈ 0.105 USDT per token`
+
+This creates a smooth price curve that increases predictably with purchases.
+
+## Smart Contracts
+
+### Core Contracts
+
+#### BondingCurve.sol
+
+Uniswap V4 hook that manages the token lifecycle:
+
+- **Token Creation**: Creates tokens via TokenFactory with metadata
+- **Bonding Curve Logic**: Implements PUMP.FUN's pricing formula
+- **Buy/Sell Functions**: Direct token trading with automated pricing
+- **Graduation System**: Creates pools and adds liquidity at 20K USDT
+- **Swap Protection**: Prevents Uniswap swaps during bonding curve phase
+- **Event Logging**: Emits price and trading events
+
+Constants:
+
+- 1 billion token max supply per token
+- 20,000 USDT graduation threshold
+
+#### TokenFactory.sol
+
+Factory contract for creating ERC20 tokens:
+
+- **Token Deployment**: Creates MockERC20 tokens with custom parameters
+- **Metadata Support**: Stores token information (name, symbol, decimals, initial supply)
+- **Creator Tracking**: Tracks tokens created by each address
+- **Registry**: Maintains list of all created tokens
+
+#### MockERC20.sol
+
+ERC20 token with additional functionality:
+
+- **Standard ERC20**: Full ERC20 compliance with custom decimals
+- **Mint/Burn**: Functions for bonding curve to mint/burn tokens
+
+## Deployment Scripts
+
+### Infrastructure Setup
+
+#### 00_DeployUniswapV4Infrastructure.s.sol
+
+Deploys the complete Uniswap V4 ecosystem:
+
+- Permit2 (token approvals)
+- PoolManager (core pool management)
+- PositionManager (liquidity positions)
+- V4Router (swap routing)
+
+#### 01_DeployTokens.s.sol
+
+Sets up the token infrastructure:
+
+- Deploys TokenFactory
+- Creates USDT token (1B supply, 18 decimals)
+- Saves addresses to deployment JSON
+
+#### 02_DeployHook.s.sol
+
+Deploys the BondingCurve hook:
+
+- Mines correct hook address (Uniswap V4 requirement)
+- Deploys hook with proper permissions
+- Configures bonding curve parameters
+
+### Token Operations
+
+#### 03_CreateToken.s.sol
+
+Creates a new token for bonding curve trading:
+
+- Creates token with metadata (name, symbol, description, social links)
+- Starts in bonding curve phase (0 initial supply)
+- Ready for buy/sell operations
+
+#### 04_Swap.s.sol
+
+Bonding curve token purchases:
+
+- Buys tokens using USDT via bonding curve
+- Shows price impact and curve progression
+- Handles automatic graduation if threshold reached
+
+#### 05_SellTokens.s.sol
+
+Bonding curve token sales:
+
+- Sells tokens back to bonding curve for USDT
+- Shows inverse price calculation
+- Updates virtual reserves accordingly
+
+#### 06_NormalSwap.s.sol
+
+Normal Uniswap trading after graduation:
+
+- Executes standard AMM swaps
+- Compares AMM vs bonding curve pricing
+- Confirms normal trading functionality
+
+## Getting Started
 
 ### Requirements
 
-This template is designed to work with Foundry (stable). If you are using Foundry Nightly, you may encounter compatibility issues. You can update your Foundry installation to the latest stable version by running:
+This template requires Foundry (stable). Update your installation:
 
-```
+```bash
 foundryup
 ```
 
-To set up the project, run the following commands in your terminal to install dependencies and run the tests:
+### Installation
 
-```
+Install dependencies and run tests:
+
+```bash
 forge install
 forge test
 ```
 
-### Local Development
+### Deployment Sequence
 
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/) locally. Scripts are available in the `script/` directory, which can be used to deploy hooks, create pools, provide liquidity and swap tokens. The scripts support both local `anvil` environment as well as running them directly on a production network.
-
-### Troubleshooting
-
-<details>
-
-#### Permission Denied
-
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
-
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)
-
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
-
-#### Anvil fork test failures
-
-Some versions of Foundry may limit contract code size to ~25kb, which could prevent local tests to fail. You can resolve this by setting the `code-size-limit` flag
-
-```
-anvil --code-size-limit 40000
-```
-
-#### Hook deployment failures
-
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
-
-1. Verify the flags are in agreement:
-   - `getHookCalls()` returns the correct flags
-   - `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-   - In **forge test**: the _deployer_ for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-   - In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-     - If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
-
-</details>
-
-### Additional Resources
-
-- [Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
-- [v4-periphery](https://github.com/uniswap/v4-periphery)
-- [v4-core](https://github.com/uniswap/v4-core)
-- [v4-by-example](https://v4-by-example.org)
+1. **Deploy Infrastructure**: `forge script script/00_DeployUniswapV4Infrastructure.s.sol`
+2. **Deploy Tokens**: `forge script script/01_DeployTokens.s.sol`
+3. **Deploy Hook**: `forge script script/02_DeployHook.s.sol`
+4. **Create Token**: `forge script script/03_CreateToken.s.sol`
+5. **Test Trading**: `forge script script/04_Swap.s.sol`
